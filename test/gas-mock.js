@@ -87,6 +87,11 @@ function loadGas({ fixture, tokens }) {
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ text: s, setMimeType() { return this; } }) }
   };
   vm.createContext(ctx);
+  // Dates must come from the script's own realm, or Code.gs's "instanceof Date" check fails.
+  const InnerDate = vm.runInContext('Date', ctx);
+  Object.values(sheets).forEach(sh => sh.rows.forEach(r => r.forEach((v, i) => {
+    if (v instanceof Date) r[i] = new InnerDate(v.getFullYear(), v.getMonth(), v.getDate());
+  })));
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
 
   const call = body => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).text);

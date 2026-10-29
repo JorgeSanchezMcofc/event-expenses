@@ -4,12 +4,23 @@
 
   var CFG = window.APP_CONFIG || {};
   var COLORS = { revenue: '#F04C57', expenditures: '#185097', profit: '#F2C14E' };
+  // Status colors: Estimation yellow, Quote orange, Pending Approval purple, Approved green,
+  // Invoiced blue, Paid dark green, Cancelled red. Same keys as the CSS classes .st-*.
+  var STATUS_CLASS = { 'Estimation': 'st-estimation', 'Quote': 'st-quote', 'Pending Approval': 'st-pending',
+    'Approved': 'st-approved', 'Invoiced': 'st-invoiced', 'Paid': 'st-paid', 'Cancelled': 'st-cancelled' };
   var BUCKETS = [
-    { key: 'estimated', label: 'Estimated / Quoted', cls: 's-estimated', color: '#9db3d6' },
-    { key: 'approved', label: 'Approved', cls: 's-approved', color: '#185097' },
-    { key: 'invoiced', label: 'Invoiced', cls: 's-invoiced', color: '#F2C14E' },
-    { key: 'paid', label: 'Paid', cls: 's-paid', color: '#1f7a4d' }
+    { key: 'estimated', label: 'Estimated / Quoted', color: '#e0a800' },
+    { key: 'approved', label: 'Approved', color: '#2e9e5b' },
+    { key: 'invoiced', label: 'Invoiced', color: '#2f6fd0' },
+    { key: 'paid', label: 'Paid', color: '#145c38' }
   ];
+  // One hue per standard category, used as a small colored dot.
+  var CATEGORY_COLOR = {
+    'Venue': '#6d4c41', 'F&B': '#e65100', 'Décor': '#c2185b', 'Event Program': '#5e35b1', 'Event Support Services': '#00838f',
+    'Entertainment': '#d81b60', 'Supplies': '#558b2f', 'Marketing': '#1565c0', 'Miscellaneous': '#757575',
+    'Photography & Videography': '#6a1b9a', 'Audio/Visual & Technology': '#283593', 'Print Materials': '#ef6c00',
+    'Ticketing & Registration': '#00695c', 'Speakers & Travel': '#ad1457', 'Other': '#9e9e9e'
+  };
   var TOKEN_KEY = 'eet_token';
 
   var state = {
@@ -39,6 +50,15 @@
     var s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
     return v < 0 ? '($' + s + ')' : '$' + s;
   }
+  function statusBadge(st) {
+    if (!st) return '<span class="muted">—</span>';
+    return '<span class="status ' + (STATUS_CLASS[st] || '') + '">' + (st === 'Paid' ? '✓ ' : '') + esc(st) + '</span>';
+  }
+  function catTag(cat) {
+    if (!cat) return '<span class="muted">—</span>';
+    return '<span class="cat"><i style="background:' + (CATEGORY_COLOR[cat] || '#9e9e9e') + '"></i>' + esc(cat) + '</span>';
+  }
+  function bucketDot(b) { return '<i class="dot" style="background:' + b.color + '"></i>'; }
   function moneyCell(n, cents) {
     return '<td class="num' + (Number(n) < 0 ? ' neg' : '') + '">' + money(n, cents) + '</td>';
   }
@@ -259,7 +279,7 @@
         (x ? '<div class="total"><span class="k">' + (x.hasAdjusted ? 'Expense budget (adjusted)' : 'Expense budget') + '</span><b>' + money(x.target) + '</b>' +
           (x.hasAdjusted ? '<span class="muted">Finance: ' + money(x.budget) + '</span>' : '') + '</div>' +
           meter(x.est.total, x.target, 'expense', exp.some(function (l) { return l.budget !== '' || l.adjusted !== ''; })) +
-          '<div class="muted small">' + BUCKETS.map(function (b) { return esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' : '') + '</div>' +
+          '<div class="muted small">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' : '') + '</div>' +
         '<div class="code-box rev"><div class="k">Revenue account</div><div class="v">' + esc(ev.revAcct || '—') + '</div>' +
         (r ? '<div class="total"><span class="k">Revenue budget</span><b>' + money(r.budget) + '</b></div>' +
           meter(r.estimate, r.budget, 'revenue', r.budget > 0) +
@@ -452,6 +472,8 @@
       f.eventId.addEventListener('change', function () { setEvent(f.eventId.value); subOverride = ''; fillCats(); loadSummary(); });
       f.cat.addEventListener('change', function () { subOverride = ''; refreshAcct(); });
       ['amount', 'status', 'date'].forEach(function (n) { f[n].addEventListener('input', refreshAcct); f[n].addEventListener('change', refreshAcct); });
+      var paintStatus = function () { f.status.className = 'status-select ' + (STATUS_CLASS[f.status.value] || ''); };
+      f.status.addEventListener('change', paintStatus); paintStatus();
       fillCats(x ? x.cat : presetCat);
       loadSummary();
 
@@ -517,7 +539,7 @@
         '<div class="kpis">' +
         kpi('Budget (Finance)', money(tot.budget)) + kpi('Target (with adjustments)', money(tot.target)) +
         kpi('Estimate (all statuses)', money(tot.est.total)) + kpi('Remaining', money(tot.target - tot.est.total)) + '</div>' +
-        '<div class="kpis">' + BUCKETS.map(function (b) { return kpi(b.label, money(tot.est[b.key])); }).join('') + '</div>';
+        '<div class="kpis">' + BUCKETS.map(function (b) { return kpi(b.label, money(tot.est[b.key]), b.color); }).join('') + '</div>';
       if (!evs.length) html += '<div class="empty">No tracked events with a budget or expenses in FY ' + esc(state.fy) + '.</div>';
       html += '<div class="event-cards">' + evs.map(function (e) {
         var x = e.expense;
@@ -525,7 +547,7 @@
           (x.hasAdjusted ? '<span class="badge adj">adjusted</span>' : '') + '</h3>' +
           '<div class="meter-label"><span>Expenses · ' + esc(e.expAcct) + '</span>' + (x.hasAdjusted ? '<span class="muted">Finance ' + money(x.budget) + '</span>' : '') + '</div>' +
           meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) +
-          '<div class="muted small">' + BUCKETS.filter(function (b) { return x.est[b.key]; }).map(function (b) { return esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
+          '<div class="muted small">' + BUCKETS.filter(function (b) { return x.est[b.key]; }).map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
           (e.revenue.budget || e.revenue.estimate ? '<div class="meter-label" style="margin-top:.6rem"><span>Revenue · ' + esc(e.revAcct) + '</span></div>' +
             meter(e.revenue.estimate, e.revenue.budget, 'revenue', e.revenue.budget > 0, true) : '') +
           (e.reviewCount ? '<div style="margin-top:.4rem"><span class="badge warn">' + e.reviewCount + ' need review</span></div>' : '') + '</button>';
@@ -538,7 +560,9 @@
       $('#db-rev').addEventListener('click', refreshRevenue);
     }).catch(showError);
   }
-  function kpi(k, v) { return '<div class="kpi"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div></div>'; }
+  function kpi(k, v, color) {
+    return '<div class="kpi"' + (color ? ' style="border-left:5px solid ' + color + '"' : '') + '><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div></div>';
+  }
 
   function refreshRevenue() {
     toast('Reading revenue sheets…', 10000);
@@ -571,7 +595,7 @@
       if (!sub) {
         var lines = e.lines.filter(function (l) { return l.side === 'Expense'; });
         html += '<div class="table-wrap"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Target</th>' +
-          BUCKETS.map(function (b) { return '<th class="num">' + esc(b.label) + '</th>'; }).join('') + '<th class="num">Remaining</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
+          BUCKETS.map(function (b) { return '<th class="num">' + bucketDot(b) + esc(b.label) + '</th>'; }).join('') + '<th class="num">Remaining</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
           lines.map(function (l) {
             return '<tr class="click" data-sub="' + esc(l.sub || '-') + '"><td><b>' + esc(l.sub || '—') + '</b><div class="muted">' + esc(l.label) + '</div></td><td>' + esc(l.cat) + '</td>' +
               (l.budgetKnown ? moneyCell(l.budget) + moneyCell(l.target) : '<td class="num muted">not set</td><td class="num muted">—</td>') +
@@ -598,10 +622,10 @@
       '<th>Vendor / description</th><th>Category</th><th>Sub</th><th class="num">Estimate</th><th>Status</th><th>PO</th>' +
       (extraCols.indexOf('actual') >= 0 ? '<th class="num">Actual (phase 2)</th>' : '') + '<th></th></tr></thead><tbody>' +
       list.map(function (r) {
-        return '<tr><td>' + esc(r.id) + (r.review === true ? ' <span class="badge warn">review</span>' : '') + '</td><td class="num">' + esc(r.date) + '</td>' +
+        return '<tr' + (r.status === 'Cancelled' ? ' class="cancelled"' : '') + '><td>' + esc(r.id) + (r.review === true ? ' <span class="badge warn">review</span>' : '') + '</td><td class="num">' + esc(r.date) + '</td>' +
           (extraCols.indexOf('event') >= 0 ? '<td>' + esc(r.eventName || r.eventId) + '</td>' : '') +
           '<td><b>' + esc(r.vendor || '—') + '</b><div class="muted">' + esc(r.description) + '</div>' + (r.review === true && r.notes ? '<div class="muted" style="font-size:.82rem">' + esc(r.notes) + '</div>' : '') + '</td>' +
-          '<td>' + esc(r.cat || '—') + '</td><td>' + esc(r.sub || '—') + '</td>' + moneyCell(r.amount, true) + '<td>' + esc(r.status || '—') + '</td>' +
+          '<td>' + catTag(r.cat) + '</td><td>' + esc(r.sub || '—') + '</td>' + '<td class="num amt">' + money(r.amount, true) + '</td><td>' + statusBadge(r.status) + '</td>' +
           '<td>' + (r.po ? esc(r.po) : (r.poDone === true ? '✓' : '—')) + '</td>' +
           (extraCols.indexOf('actual') >= 0 ? '<td class="num muted">—</td>' : '') +
           '<td><button class="link" data-edit="' + esc(r.id) + '" data-fy="' + esc(r.fy) + '">Edit</button></td></tr>';
