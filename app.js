@@ -92,6 +92,13 @@
     return '<div class="fin">' + icon('ledger') + '<span>Finance booked <b>' + money(v) + '</b></span><span class="muted">as of ' + esc(periodLabel(f.period)) +
       (f.months ? ' (' + f.months + ' mo.)' : '') + gap + '</span></div>';
   }
+  // Whether an event has an expense budget: from its sub-accounts, or (older FYs) the event total from Finance.
+  function expKnown(e) {
+    return e.expense.budgetKnown !== undefined ? e.expense.budgetKnown : e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; });
+  }
+  function budgetNote(x) {
+    return x.budgetSource && x.budgetSource !== 'Catalog' ? '<div class="muted small">Event total from the ' + esc(x.budgetSource) + ' (no budget per sub-account this FY)</div>' : '';
+  }
   function bucketDot(b) { return '<i class="dot" style="background:' + b.color + '"></i>'; }
   function moneyCell(n, cents) {
     // Cents get their own span so narrow screens can hide them (see .cents in styles.css).
@@ -337,7 +344,7 @@
         '<div class="code-box"><div class="k">Expense account</div><div class="v">' + esc(ev.expAcct || '—') + '</div>' +
         (x ? '<div class="total"><span class="k">' + (x.hasAdjusted ? 'Expense budget (adjusted)' : 'Expense budget') + '</span><b>' + money(x.target) + '</b>' +
           (x.hasAdjusted ? '<span class="muted">Finance: ' + money(x.budget) + '</span>' : '') + '</div>' +
-          meter(x.est.total, x.target, 'expense', exp.some(function (l) { return l.budget !== '' || l.adjusted !== ''; })) +
+          meter(x.est.total, x.target, 'expense', expKnown(s)) + budgetNote(x) +
           '<div class="muted small">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
           finLine(s.finance, 'expense', x.est.total) : '') + '</div>' +
         '<div class="code-box rev"><div class="k">Revenue account</div><div class="v">' + esc(ev.revAcct || '—') + '</div>' +
@@ -598,7 +605,7 @@
       var fin = s.finance, finTot = 0;
       if (fin) evs.forEach(function (e) { finTot += e.finance ? e.finance.expYtd : 0; });
       var overCount = evs.filter(function (e) {
-        return e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; }) && e.expense.est.total > e.expense.target + 0.005;
+        return expKnown(e) && e.expense.est.total > e.expense.target + 0.005;
       }).length;
       var pctAll = tot.target > 0 ? Math.round(tot.est.total / tot.target * 100) : 0;
       var html = '<div class="stack"><div class="page-head"><h1>Live dashboard <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
@@ -617,7 +624,7 @@
       if (!evs.length) html += '<div class="empty">No tracked events with a budget or expenses in FY ' + esc(state.fy) + '.</div>';
       html += '<div class="event-cards">' + evs.map(function (e) {
         var x = e.expense;
-        var known = e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; });
+        var known = expKnown(e);
         var over = known && x.est.total > x.target + 0.005;
         var pct = known && x.target > 0 ? Math.round(x.est.total / x.target * 100) : null;
         return '<button class="event-card ' + (!known ? '' : over ? 'is-bad' : 'is-good') + '" data-ev="' + esc(e.eventId) + '"><h3><span>' + esc(e.name) +
@@ -693,7 +700,7 @@
         (e.finance !== undefined ? kpi('Finance booked', e.finance ? money(e.finance.expYtd) : '—', '#0d2f5e', 'ledger',
           e.finance ? 'as of ' + esc(periodLabel(e.finance.period)) + ' (' + e.finance.months + ' mo.)' : 'no statement yet') : '') + '</div>' +
         '<div class="drill-top"><div class="card"><div class="meter-label"><span>Spent vs budget</span></div>' +
-        meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) +
+        meter(x.est.total, x.target, 'expense', expKnown(e)) + budgetNote(x) +
         '<div class="muted small" style="margin-top:.5rem">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
         (e.revenue.budget || e.revenue.estimate ? '<div class="meter-label" style="margin-top:1rem"><span>Revenue · ' + esc(e.revAcct) + '</span></div>' +
           meter(e.revenue.estimate, e.revenue.budget, 'revenue', e.revenue.budget > 0) : '') +

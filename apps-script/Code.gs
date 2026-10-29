@@ -355,20 +355,35 @@ function apiSummary_(fy, eventId) {
     });
 
     var prior = history.filter(function (h) { return h.eventId === ev.id && h.fy === pfy && h.type === 'Actual'; })[0];
+
+    // Older FYs have no budget per sub-account. Fall back to the event's total budget from
+    // Finance's income statement (Finance YTD), then from a History "Budget" row.
+    var expBudget = sum(expLines, 'budget'), expTarget = sum(expLines, 'target'), revBudget = sum(revLines, 'budget');
+    var expKnown = expLines.some(function (r) { return r.budgetKnown; }), revKnown = revBudget > 0, budgetSource = 'Catalog';
+    var fin = finance ? financeEvent_(finance, ev.id) : null;
+    var hb = history.filter(function (h) { return h.eventId === ev.id && h.fy === fy && h.type === 'Budget'; })[0];
+    if (!expKnown) {
+      if (fin && fin.expBudget) { expBudget = expTarget = fin.expBudget; expKnown = true; budgetSource = 'Finance income statement'; }
+      else if (hb && num_(hb.expenditures)) { expBudget = expTarget = num_(hb.expenditures); expKnown = true; budgetSource = 'History'; }
+    }
+    if (!revKnown) {
+      if (fin && fin.revBudget) revBudget = fin.revBudget;
+      else if (hb && num_(hb.revenue)) revBudget = num_(hb.revenue);
+    }
     var expenseCount = evExp.filter(function (x) { return x.status !== 'Cancelled'; }).length;
 
     return {
       eventId: ev.id, name: ev.name, track: ev.track, date: ev.date || '', attendees: ev.attendees || '',
       expAcct: ev.expAcct, revAcct: ev.revAcct, notes: ev.notes || '',
-      expense: { budget: sum(expLines, 'budget'), target: sum(expLines, 'target'), hasAdjusted: hasAdjusted,
-        adjustmentNote: note, est: est, remaining: round2_(sum(expLines, 'target') - est.total) },
-      revenue: { budget: sum(revLines, 'budget'), estimate: round2_(evRev.reduce(function (s, r) { return s + num_(r.revenue); }, 0)),
+      expense: { budget: expBudget, target: expTarget, budgetKnown: expKnown, budgetSource: budgetSource, hasAdjusted: hasAdjusted,
+        adjustmentNote: note, est: est, remaining: round2_(expTarget - est.total) },
+      revenue: { budget: revBudget, estimate: round2_(evRev.reduce(function (s, r) { return s + num_(r.revenue); }, 0)),
         inkind: round2_(evRev.reduce(function (s, r) { return s + num_(r.inkind); }, 0)) },
       prior: prior ? { fy: pfy, revenue: num_(prior.revenue), expenditures: num_(prior.expenditures) } : { fy: pfy, revenue: null, expenditures: null },
       lines: lineRows,
       categories: Object.keys(categories).map(function (k) { return categories[k]; }),
       revenueCategories: Object.keys(revCats).map(function (k) { return revCats[k]; }),
-      finance: finance ? financeEvent_(finance, ev.id) : null,
+      finance: fin,
       expenseCount: expenseCount,
       reviewCount: evExp.filter(function (x) { return x.review === true; }).length
     };
