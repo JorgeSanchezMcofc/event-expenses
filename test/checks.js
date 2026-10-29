@@ -48,6 +48,17 @@ check('Whiskey Business 25-26 budget $30,000 / actual $33,031; 26-27 budget $23,
   return `25-26 ${money(s25.expense.budget)} / actual ${money(h.expenditures)}; 26-27 ${money(s26.expense.budget)}`;
 });
 
+check('Summary carries Finance YTD from the latest statement for the FY', () => {
+  const s25 = me({ action: 'summary', fy: '25-26', event: 'WHISKEY' });
+  const f = s25.events[0].finance;
+  assert.ok(s25.finance && s25.finance.months === 12 && /^2026-09/.test(s25.finance.period));
+  assert.strictEqual(f.expYtd, X.whiskey.actual2526);
+  const s26 = me({ action: 'summary', fy: '26-27' });
+  if (s26.finance) assert.ok(s26.events.every(e => e.finance && typeof e.finance.expYtd === 'number'));
+  else assert.ok(s26.events.every(e => e.finance === null));
+  return `25-26 as of ${s25.finance.period}: Whiskey booked ${money(f.expYtd)}; 26-27 ${s26.finance ? 'as of ' + s26.finance.period : 'no statement yet'}`;
+});
+
 check('Every old Data row is in Expenses; Needs Review count', () => {
   const all = [...me({ action: 'expenses', fy: '25-26' }), ...me({ action: 'expenses', fy: '26-27' }), ...me({ action: 'expenses', fy: '' })];
   const byId = new Map(all.map(x => [x.id, x]));

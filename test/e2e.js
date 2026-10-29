@@ -22,7 +22,7 @@ function startServer(port, token) {
   const results = [];
   const ok = (name, cond, note) => { results.push([cond ? 'PASS' : 'FAIL', name, note || '']); };
   try {
-    for (const vp of [{ name: 'desktop', width: 1280, height: 900 }, { name: 'phone', width: 375, height: 812 }]) {
+    for (const vp of [{ name: 'desktop', width: 1280, height: 900 }, { name: 'tablet', width: 820, height: 1100 }, { name: 'phone', width: 375, height: 812 }]) {
       const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, acceptDownloads: true, deviceScaleFactor: vp.name === 'phone' ? 2 : 1 });
       const page = await ctx.newPage();
       const errors = [];
@@ -33,7 +33,9 @@ function startServer(port, token) {
       page.on('requestfailed', r => { if (!external.test(r.url())) errors.push('request failed: ' + r.url()); });
       await page.route(/accounts\.google\.com/, r => r.abort());
       const base = 'http://localhost:8091/';
-      const overflow = async () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      // Nothing may scroll sideways: not the page, and not any table inside it.
+      const overflow = async () => page.evaluate(() => Math.max(document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ...Array.from(document.querySelectorAll('.table-wrap')).map(w => w.scrollWidth - w.clientWidth)));
 
       await page.goto(base + '#/lookup');
       await page.selectOption('#lk-event', 'BANQUET');
@@ -41,14 +43,19 @@ function startServer(port, token) {
       await page.click('#lk-cats [data-cat="F&B"]');
       const answer = await page.textContent('.answer');
       ok(`[${vp.name}] Lookup Banquet / F&B`, answer.includes(B.acct + ' · ' + B.fbSub) && answer.includes(usd(B.fbAdjusted)) && answer.includes(usd(B.fbBudget)), answer.replace(/\s+/g, ' ').slice(0, 120));
-      ok(`[${vp.name}] Lookup has no horizontal page scroll`, (await overflow()) <= 0);
+      ok(`[${vp.name}] Lookup has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
+      const lkFin = await page.textContent('.big-codes');
+      ok(`[${vp.name}] Lookup shows what Finance booked`, X.financeOct ? lkFin.includes('Finance booked') : /no statement yet/.test(lkFin));
       await page.screenshot({ path: `${OUT}/${vp.name}-1-lookup.png`, fullPage: true });
 
       await page.goto(base + '#/dashboard');
       await page.waitForSelector('.event-card[data-ev="BANQUET"]');
       const before = await page.textContent('.event-card[data-ev="BANQUET"]');
       await page.screenshot({ path: `${OUT}/${vp.name}-3-dashboard.png`, fullPage: true });
-      ok(`[${vp.name}] Dashboard has no horizontal page scroll`, (await overflow()) <= 0);
+      ok(`[${vp.name}] Dashboard has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
+      ok(`[${vp.name}] Dashboard Finance booked KPI`, /Finance booked/.test(await page.textContent('.kpis')));
+      if (X.financeOct) ok(`[${vp.name}] Event card shows Finance YTD`, before.includes('Finance booked ' + usd(X.financeOct.banquetExp)), before.replace(/\s+/g, ' ').slice(0, 200));
+      ok(`[${vp.name}] Dashboard donut drawn`, await page.evaluate(() => !!Chart.getChart(document.getElementById('db-donut'))));
 
       if (vp.name === 'desktop') {
         await page.goto(base + '#/add/BANQUET/F%26B');
@@ -102,6 +109,15 @@ function startServer(port, token) {
         await page.click(`tr[data-sub="${B.fbSub}"]`);
         await page.waitForSelector('text=Expenses on ' + B.fbSub);
         ok('[desktop] Drill-down event → sub-account → expenses', (await page.textContent('main')).includes('E2E Vendor'));
+        ok('[desktop] Drill-down has no sideways scrolling', (await overflow()) <= 0, String(await overflow()));
+        await page.screenshot({ path: `${OUT}/${vp.name}-3b-drill.png`, fullPage: true });
+      }
+
+      if (vp.name !== 'desktop') {
+        await page.goto(base + '#/dashboard/BANQUET');
+        await page.waitForSelector(`tr[data-sub="${B.fbSub}"]`);
+        await page.waitForTimeout(200);
+        ok(`[${vp.name}] Drill-down has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
         await page.screenshot({ path: `${OUT}/${vp.name}-3b-drill.png`, fullPage: true });
       }
 
@@ -116,7 +132,7 @@ function startServer(port, token) {
       });
       ok(`[${vp.name}] Chart colors Revenue/Expenditures/Profit`, JSON.stringify(colors) === JSON.stringify(['#F04C57', '#185097', '#F2C14E']), colors.join(' '));
       await page.screenshot({ path: `${OUT}/${vp.name}-4-report.png`, fullPage: true });
-      ok(`[${vp.name}] Report has no horizontal page scroll`, (await overflow()) <= 0);
+      ok(`[${vp.name}] Report has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
 
       if (vp.name === 'desktop') {
         await page.goto(base + '#/report/BANQUET');
@@ -138,11 +154,13 @@ function startServer(port, token) {
       await page.waitForSelector('h2');
       await page.screenshot({ path: `${OUT}/${vp.name}-5-missing.png`, fullPage: true });
       ok(`[${vp.name}] What's missing has Actual (phase 2) column`, (await page.textContent('main')).includes('Actual (phase 2)'));
+      ok(`[${vp.name}] What's missing has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
 
       await page.goto(base + '#/history/BANQUET');
       await page.waitForSelector('#hs-body table');
       const hist = await page.textContent('#hs-body');
       ok(`[${vp.name}] History shows last 5 FYs`, /21-22/.test(hist) && /25-26/.test(hist) && !/20-21/.test(hist));
+      ok(`[${vp.name}] History has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
       await page.screenshot({ path: `${OUT}/${vp.name}-6-history.png`, fullPage: true });
       ok(`[${vp.name}] No JavaScript errors`, errors.length === 0, errors.join(' | '));
       await ctx.close();

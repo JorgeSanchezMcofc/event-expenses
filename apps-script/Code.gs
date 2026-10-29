@@ -6,13 +6,14 @@
  * ALLOWED_EMAIL script property gets data. Nothing secret lives in this file: the
  * OAuth client ID and the allowed email are script properties (see README).
  *
- * Reads:  catalog, expenses, summary, history, revenue, reconcile
+ * Reads:  catalog, expenses, summary, history, revenue, reconcile (summary includes Finance YTD)
  * Writes: expense (create / update / cancel), refreshRevenue
  * GET  ?action=summary&fy=26-27&event=BANQUET&token=...
  * POST {"action":"summary","fy":"26-27","event":"BANQUET","token":"..."} as text/plain
  */
 
-var TABS = { events: 'Events', catalog: 'Catalog', expenses: 'Expenses', revenue: 'Revenue', history: 'History', config: 'Config' };
+var TABS = { events: 'Events', catalog: 'Catalog', expenses: 'Expenses', revenue: 'Revenue', history: 'History', config: 'Config',
+  finance: 'Finance YTD' };
 
 var COLS = {
   events: ['id', 'name', 'aliases', 'fy', 'expAcct', 'revAcct', 'date', 'attendees', 'track', 'revSheets', 'notes'],
@@ -20,10 +21,12 @@ var COLS = {
   expenses: ['id', 'fy', 'eventId', 'date', 'vendor', 'description', 'cat', 'acct', 'sub', 'amount', 'status',
     'payType', 'po', 'poDone', 'checkDone', 'actual', 'notes', 'review'],
   revenue: ['fy', 'eventId', 'level', 'count', 'revenue', 'inkind', 'source'],
-  history: ['eventId', 'fy', 'type', 'revenue', 'expenditures', 'profit', 'source']
+  history: ['eventId', 'fy', 'type', 'revenue', 'expenditures', 'profit', 'source'],
+  // Filled each month from Beto's income statement by the "Beto financials check" scheduled task.
+  finance: ['period', 'fy', 'months', 'acct', 'eventId', 'label', 'budget', 'ytd', 'source']
 };
 
-var TEXT_FIELDS = { fy: 1, acct: 1, sub: 1, po: 1, expAcct: 1, revAcct: 1 };
+var TEXT_FIELDS = { fy: 1, acct: 1, sub: 1, po: 1, expAcct: 1, revAcct: 1, period: 1 };
 
 // Dashboard buckets: Estimation, Quote and Pending Approval roll up into "estimated".
 var STATUS_BUCKET = { 'Estimation': 'estimated', 'Quote': 'estimated', 'Pending Approval': 'estimated',
@@ -290,6 +293,7 @@ function apiSummary_(fy, eventId) {
   var expenses = readTable_('expenses').filter(function (x) { return x.fy === fy; });
   var revenue = readTable_('revenue').filter(function (r) { return r.fy === fy; });
   var history = readTable_('history');
+  var finance = financeFor_(fy);
   var pfy = prevFy_(fy);
 
   var wanted = eventId ? events.filter(function (e) { return e.id === eventId; })
@@ -364,12 +368,39 @@ function apiSummary_(fy, eventId) {
       lines: lineRows,
       categories: Object.keys(categories).map(function (k) { return categories[k]; }),
       revenueCategories: Object.keys(revCats).map(function (k) { return revCats[k]; }),
+      finance: finance ? financeEvent_(finance, ev.id) : null,
       expenseCount: expenseCount,
       reviewCount: evExp.filter(function (x) { return x.review === true; }).length
     };
   });
   if (!eventId) out = out.filter(function (s) { return s.expense.budget || s.expense.est.total || s.revenue.budget || s.revenue.estimate; });
-  return { fy: fy, events: out };
+  return { fy: fy, events: out, finance: finance ? { period: finance.period, months: finance.months } : null };
+}
+
+/**
+ * Latest Finance YTD statement for a FY: { period, months, rows }, or null when Beto hasn't
+ * sent one yet (or the tab doesn't exist).
+ */
+function financeFor_(fy) {
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.finance)) return null;
+  var rows = readTable_('finance').filter(function (r) { return r.fy === fy; });
+  if (!rows.length) return null;
+  var period = rows.reduce(function (p, r) { return r.period > p ? r.period : p; }, '');
+  rows = rows.filter(function (r) { return r.period === period; });
+  return { period: period, months: num_(rows[0].months), rows: rows };
+}
+
+// Expense accounts start with 5, revenue accounts with 4.
+function financeEvent_(fin, eventId) {
+  var out = { period: fin.period, months: fin.months, expYtd: 0, expBudget: 0, revYtd: 0, revBudget: 0, found: false };
+  fin.rows.forEach(function (r) {
+    if (r.eventId !== eventId) return;
+    out.found = true;
+    if (r.acct.charAt(0) === '5') { out.expYtd += num_(r.ytd); out.expBudget += num_(r.budget); }
+    else if (r.acct.charAt(0) === '4') { out.revYtd += num_(r.ytd); out.revBudget += num_(r.budget); }
+  });
+  ['expYtd', 'expBudget', 'revYtd', 'revBudget'].forEach(function (k) { out[k] = round2_(out[k]); });
+  return out;
 }
 
 function apiReconcile_(fy) {

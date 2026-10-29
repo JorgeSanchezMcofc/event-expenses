@@ -9,7 +9,8 @@ This repository is public. It holds no data and no secrets.
 ```
 Browser (GitHub Pages)  ──Google Sign-In ID token──▶  Apps Script web app  ──▶  Google Sheet
 index.html / app.js                                    apps-script/Code.gs        Events, Catalog, Expenses,
-                                                       checks token + email       Revenue, History, Config
+                                                       checks token + email       Revenue, History, Config,
+                                                                                  Finance YTD
 ```
 
 - The page signs in with Google Identity Services and sends the ID token with every request (`POST`, `text/plain` body, so no CORS preflight).
@@ -22,7 +23,7 @@ index.html / app.js                                    apps-script/Code.gs      
 |---|---|
 | `#/lookup` | Pick an event and see its expense and revenue accounts, every sub-account with category, budget and remaining. Tap a category to get the exact sub-account in large type. |
 | `#/add` | Add or edit an estimate. The account and sub-account fill in from the Catalog, with a warning when the line would go over budget. Edit and Cancel are reached from any expense list. |
-| `#/dashboard` | All tracked events for the FY: budget, adjusted target, estimate split by Estimated/Quoted, Approved, Invoiced, Paid. Drill down event → sub-account → expenses. |
+| `#/dashboard` | All tracked events for the FY: budget, adjusted target, estimate split by Estimated/Quoted, Approved, Invoiced, Paid, and what Finance has booked so far (Finance YTD). Drill down event → sub-account → expenses. |
 | `#/report` | Replica of the old Report Master tab, with **Download PDF** and **Download CSV**. Shows the adjustment note when an adjusted target exists. |
 | `#/missing` | Approved without a PO, invoiced but not paid, Needs Review rows, lines over budget. The Actual column is a placeholder for phase 2. |
 | `#/history` | The last 3 to 5 fiscal years of revenue, expenditures and profit, as a table and a chart. |
@@ -35,7 +36,7 @@ Every call takes `token`. Reads also work as `GET ?action=…`, but the site use
 |---|---|---|
 | `catalog` | `fy` | events and catalog lines for the FY, the FY list, Config lists |
 | `expenses` | `fy`, `event` | Expenses rows |
-| `summary` | `fy`, `event` (optional) | budget, adjusted target, estimate by status, remaining, per sub-account and category |
+| `summary` | `fy`, `event` (optional) | budget, adjusted target, estimate by status, remaining, per sub-account and category, and Finance YTD from the latest statement for the FY |
 | `history` | `event` | History rows |
 | `revenue` | `fy`, `event` | Revenue rows (from Blanca's sheets) |
 | `reconcile` | `fy` | the lists on the "What's missing" screen |
@@ -78,8 +79,9 @@ Say FY 27-28, when Finance sends the coded budget:
 2. **Catalog:** for every 402xx (revenue) and 504xx (expense) sub-account in Finance's file, add a row with `FY = 27-28`, Event ID, Side, Account, Sub-Account, Finance's label, a Standard Category from Config, and Official Budget. Keep the codes as text (the columns are formatted as plain text). The key is FY + Event + Account + Sub-Account, so Finance's duplicate codes (2080401, 2130301/2130399) are fine.
 3. Put any budget you were asked to change in **Adjusted Target** and say why in **Adjustment Note**. Leave Official Budget as Finance sent it.
 4. Change **Config → Current FY** and `defaultFy` in `config.js`.
-5. After 9/30, add the year's actuals from Finance's September income statement (YTD column) to **History** with Type `Actual`.
-6. On the dashboard, click **Refresh revenue** to pull the new revenue sheets.
+5. **Finance YTD** fills itself: the "Beto financials check" scheduled task reads each monthly income statement from Outlook and writes the event lines (402xx/504xx only) to the Finance YTD tab, logging each email in Finance Log. The app shows the latest period for the FY.
+6. After 9/30, add the year's actuals from Finance's September income statement (YTD column) to **History** with Type `Actual`.
+7. On the dashboard, click **Refresh revenue** to pull the new revenue sheets.
 
 ## Local testing
 
@@ -90,6 +92,8 @@ FIXTURE=/path/to/fixture.json node test/checks.js        # API acceptance checks
 FIXTURE=/path/to/fixture.json node test/e2e.js           # browser checks (Playwright)
 FIXTURE=/path/to/fixture.json node test/dev-server.js    # preview at http://localhost:8080 (signs in with a test token)
 ```
+
+Wide tables must fit without scrolling sideways (they turn into cards under 900px); the browser checks fail if any table or the page scrolls horizontally at 1280, 820 or 375px.
 
 ## Third-party code
 

@@ -10,13 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7fca1cc">
+  <link rel="stylesheet" href="styles.css?v=20261029">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <img src="assets/icon.svg" alt="" width="28" height="28">
-      <span>Event Expense Tracker</span>
+      <span>Event Expense Tracker<small>McAllen Chamber of Commerce</small></span>
     </div>
     <div class="topbar-right">
       <label class="fy-pick">FY
@@ -27,12 +27,12 @@
   </header>
 
   <nav class="tabs" id="tabs" hidden>
-    <a href="#/lookup" data-route="lookup">Lookup</a>
-    <a href="#/add" data-route="add">Add expense</a>
-    <a href="#/dashboard" data-route="dashboard">Dashboard</a>
-    <a href="#/report" data-route="report">Report</a>
-    <a href="#/missing" data-route="missing">What's missing</a>
-    <a href="#/history" data-route="history">History</a>
+    <a href="#/lookup" data-route="lookup"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="full">Lookup</span><span class="short">Lookup</span></a>
+    <a href="#/add" data-route="add"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="full">Add expense</span><span class="short">Add</span></a>
+    <a href="#/dashboard" data-route="dashboard"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span class="full">Dashboard</span><span class="short">Dashboard</span></a>
+    <a href="#/report" data-route="report"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg><span class="full">Report</span><span class="short">Report</span></a>
+    <a href="#/missing" data-route="missing"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 16.5h-19z"/><path d="M12 10v4M12 17.5v.01"/></svg><span class="full">What's missing</span><span class="short">Missing</span></a>
+    <a href="#/history" data-route="history"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="full">History</span><span class="short">History</span></a>
   </nav>
 
   <main id="view">
@@ -46,10 +46,10 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="config.js?v=7fca1cc"></script>
+  <script src="config.js?v=20261029"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="assets/vendor/chart-4.4.1.umd.js"></script>
   <script src="assets/vendor/html2pdf-0.10.1.bundle.min.js" defer></script>
-  <script src="app.js?v=7fca1cc"></script>
+  <script src="app.js?v=20261029"></script>
 </body>
 </html>

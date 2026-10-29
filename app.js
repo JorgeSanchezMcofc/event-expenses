@@ -21,6 +21,18 @@
     'Photography & Videography': '#6a1b9a', 'Audio/Visual & Technology': '#283593', 'Print Materials': '#ef6c00',
     'Ticketing & Registration': '#00695c', 'Speakers & Travel': '#ad1457', 'Other': '#9e9e9e'
   };
+  var ICONS = {
+    wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 10h18"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+    alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16v.01"/>',
+    ledger: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8"/>',
+    hash: '<path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    dollar: '<path d="M12 3v18M16 7.5c0-1.9-1.8-3-4-3s-4 1.1-4 3 1.8 2.6 4 3 4 1.1 4 3-1.8 3-4 3-4-1.1-4-3"/>'
+  };
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var TOKEN_KEY = 'eet_token';
 
   var state = {
@@ -58,9 +70,33 @@
     if (!cat) return '<span class="muted">—</span>';
     return '<span class="cat"><i style="background:' + (CATEGORY_COLOR[cat] || '#9e9e9e') + '"></i>' + esc(cat) + '</span>';
   }
+  function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || '') + '</svg>'; }
+  // Thin stacked bar of the four status buckets, e.g. under an estimate.
+  function mixBar(est) {
+    var total = BUCKETS.reduce(function (s, b) { return s + Math.max(0, est[b.key] || 0); }, 0);
+    if (!total) return '';
+    return '<div class="mix" title="' + esc(BUCKETS.filter(function (b) { return est[b.key]; }).map(function (b) { return b.label + ' ' + money(est[b.key]); }).join(' · ')) + '">' +
+      BUCKETS.map(function (b) { var w = Math.max(0, est[b.key] || 0) / total * 100; return w ? '<span style="width:' + w.toFixed(2) + '%;background:' + b.color + '"></span>' : ''; }).join('') + '</div>';
+  }
+  // "2026-10" (or a date) → "Oct 2026"
+  function periodLabel(p) {
+    var m = /^(\d{4})-(\d{2})/.exec(p || '');
+    return m ? MONTHS[+m[2] - 1] + ' ' + m[1] : String(p || '');
+  }
+  /** What Finance has booked for an event so far this FY, from Beto's latest income statement. */
+  function finLine(f, kind, estimate) {
+    if (f === undefined) return ''; // API not updated yet
+    if (!f) return '<div class="fin none">' + icon('ledger') + '<span>Finance: no statement yet for FY ' + esc(state.fy) + '</span></div>';
+    var v = kind === 'revenue' ? f.revYtd : f.expYtd;
+    var gap = estimate === undefined ? '' : ' · your estimate ' + money(estimate);
+    return '<div class="fin">' + icon('ledger') + '<span>Finance booked <b>' + money(v) + '</b></span><span class="muted">as of ' + esc(periodLabel(f.period)) +
+      (f.months ? ' (' + f.months + ' mo.)' : '') + gap + '</span></div>';
+  }
   function bucketDot(b) { return '<i class="dot" style="background:' + b.color + '"></i>'; }
   function moneyCell(n, cents) {
-    return '<td class="num' + (Number(n) < 0 ? ' neg' : '') + '">' + money(n, cents) + '</td>';
+    // Cents get their own span so narrow screens can hide them (see .cents in styles.css).
+    var txt = money(n, cents).replace(/(\.\d\d)(\)?)$/, '<span class="cents">$1</span>$2');
+    return '<td class="num' + (Number(n) < 0 ? ' neg' : '') + '">' + txt + '</td>';
   }
   function sessionGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
   function sessionSet(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) { /* private mode */ } }
@@ -173,6 +209,29 @@
     }).catch(showError);
   }
 
+  // Wide tables turn into one card per row on small screens (see .cards in styles.css);
+  // each cell needs its column name to show as a label there.
+  function labelTables() {
+    view.querySelectorAll('.table-wrap.cards table').forEach(function (t) {
+      if (t.dataset.labeled) return;
+      t.dataset.labeled = '1';
+      var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (th) { return th.textContent.trim(); });
+      t.querySelectorAll('tbody tr').forEach(function (tr) {
+        var lead = tr.querySelector('td.lead');
+        Array.prototype.forEach.call(tr.children, function (td, i) {
+          if (!td.hasAttribute('data-label')) td.setAttribute('data-label', heads[i] || '');
+          if (!lead && i === 0 && !td.classList.contains('meter-col')) td.classList.add('lead');
+        });
+      });
+    });
+  }
+  new MutationObserver(labelTables).observe(view, { childList: true, subtree: true });
+
+  // The tab bar sticks right under the header, whatever height the header ends up.
+  function stickTabs() { $('#tabs').style.top = $('.topbar').offsetHeight + 'px'; }
+  window.addEventListener('resize', stickTabs);
+  stickTabs();
+
   $('#fy').addEventListener('change', function (e) {
     state.fy = e.target.value; localSet('eet_fy', state.fy); route();
   });
@@ -256,7 +315,7 @@
       view.innerHTML = '<div class="stack">' +
         '<h1>Account lookup <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
         '<label class="field"><span>Event</span><select id="lk-event">' + eventOptions(cat, { all: true, withLines: true }) + '</select></label>' +
-        '<div id="lk-body"></div></div>';
+        '<div id="lk-body" class="stack"></div></div>';
       $('#lk-event').addEventListener('change', function (e) { setEvent(e.target.value); drawLookup(cat); });
       drawLookup(cat);
     }).catch(showError);
@@ -279,27 +338,29 @@
         (x ? '<div class="total"><span class="k">' + (x.hasAdjusted ? 'Expense budget (adjusted)' : 'Expense budget') + '</span><b>' + money(x.target) + '</b>' +
           (x.hasAdjusted ? '<span class="muted">Finance: ' + money(x.budget) + '</span>' : '') + '</div>' +
           meter(x.est.total, x.target, 'expense', exp.some(function (l) { return l.budget !== '' || l.adjusted !== ''; })) +
-          '<div class="muted small">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' : '') + '</div>' +
+          '<div class="muted small">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
+          finLine(s.finance, 'expense', x.est.total) : '') + '</div>' +
         '<div class="code-box rev"><div class="k">Revenue account</div><div class="v">' + esc(ev.revAcct || '—') + '</div>' +
         (r ? '<div class="total"><span class="k">Revenue budget</span><b>' + money(r.budget) + '</b></div>' +
           meter(r.estimate, r.budget, 'revenue', r.budget > 0) +
-          '<div class="muted small">From the event\'s revenue sheet' + (r.inkind ? ' · in-kind ' + money(r.inkind) : '') + '</div>' : '') + '</div></div>';
+          '<div class="muted small">From the event\'s revenue sheet' + (r.inkind ? ' · in-kind ' + money(r.inkind) : '') + '</div>' +
+          finLine(s.finance, 'revenue') : '') + '</div></div>';
       if (ev.notes) html += '<p class="muted">' + esc(ev.notes) + '</p>';
       if (x && x.hasAdjusted && x.adjustmentNote) html += '<div class="notice">' + esc(x.adjustmentNote) + '</div>';
       if (cats.length) {
         html += '<div><h2>Pick a category</h2><div class="pills" id="lk-cats">' + cats.map(function (c) {
-          return '<button class="pill' + (c === pickedCat ? ' active' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
+          return '<button class="pill' + (c === pickedCat ? ' active' : '') + '" data-cat="' + esc(c) + '"><i style="background:' + (CATEGORY_COLOR[c] || '#9e9e9e') + '"></i>' + esc(c) + '</button>';
         }).join('') + '</div></div><div id="lk-answer"></div>';
       }
       if (exp.length) {
-        html += '<h2>All sub-accounts</h2><div class="table-wrap"><table class="lines"><thead><tr><th>Sub-account</th><th>Category</th><th class="hide-sm">Finance label</th>' +
+        html += '<h2>All sub-accounts</h2><div class="table-wrap cards"><table class="lines"><thead><tr><th>Sub-account</th><th>Category</th><th class="hide-sm">Finance label</th>' +
           '<th class="num">Budget</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
           exp.map(function (l) {
             var st = lineStats(s, l.sub);
             var target = st ? st.target : Number(l.adjusted !== '' ? l.adjusted : l.budget || 0);
             var spent = st ? st.est.total : 0;
             var known = l.budget !== '' || l.adjusted !== '';
-            return '<tr class="click" data-sub="' + esc(l.sub) + '"><td><b>' + esc(l.sub) + '</b></td><td>' + esc(l.cat) + '</td><td class="hide-sm">' + esc(l.label) + '</td>' +
+            return '<tr class="click" data-sub="' + esc(l.sub) + '"><td><b>' + esc(l.sub) + '</b></td><td>' + catTag(l.cat) + '</td><td class="hide-sm">' + esc(l.label) + '</td>' +
               '<td class="num">' + (known ? money(target) : '<span class="muted">not set</span>') +
               (l.adjusted !== '' && l.adjusted !== null ? '<div><span class="badge adj">adjusted</span></div>' : '') + '</td>' +
               '<td class="meter-col">' + meter(spent, target, 'expense', known, true) + '</td></tr>';
@@ -534,25 +595,47 @@
         tot.budget += e.expense.budget; tot.target += e.expense.target;
         Object.keys(tot.est).forEach(function (k) { tot.est[k] += e.expense.est[k]; });
       });
-      var html = '<div class="stack"><div class="row" style="align-items:center"><h1 style="flex:1 1 auto">Live dashboard · FY ' + esc(state.fy) + '</h1>' +
-        '<div class="btn-row" style="flex:0 0 auto"><button class="btn secondary" id="db-refresh">Refresh</button><button class="btn secondary" id="db-rev">Refresh revenue</button></div></div>' +
+      var fin = s.finance, finTot = 0;
+      if (fin) evs.forEach(function (e) { finTot += e.finance ? e.finance.expYtd : 0; });
+      var overCount = evs.filter(function (e) {
+        return e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; }) && e.expense.est.total > e.expense.target + 0.005;
+      }).length;
+      var pctAll = tot.target > 0 ? Math.round(tot.est.total / tot.target * 100) : 0;
+      var html = '<div class="stack"><div class="page-head"><h1>Live dashboard <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
+        '<div class="btn-row"><button class="btn secondary" id="db-refresh">Refresh</button><button class="btn secondary" id="db-rev">Refresh revenue</button></div></div>' +
+        '<div class="hero"><div class="card donut-card"><div class="donut"><canvas id="db-donut" aria-label="Estimate against target by status"></canvas>' +
+        '<div class="center"><b class="' + (pctAll > 100 ? 'neg' : '') + '">' + pctAll + '%</b><span>of target</span></div></div>' +
+        '<div class="legend">' + BUCKETS.map(function (b) { return '<span><i style="background:' + b.color + '"></i>' + esc(b.label) + ' <b>' + money(tot.est[b.key]) + '</b></span>'; }).join('') +
+        '</div></div>' +
         '<div class="kpis">' +
-        kpi('Budget (Finance)', money(tot.budget)) + kpi('Target (with adjustments)', money(tot.target)) +
-        kpi('Estimate (all statuses)', money(tot.est.total)) + kpi('Remaining', money(tot.target - tot.est.total)) + '</div>' +
-        '<div class="kpis">' + BUCKETS.map(function (b) { return kpi(b.label, money(tot.est[b.key]), b.color); }).join('') + '</div>';
+        kpi('Budget (Finance)', money(tot.budget), '#185097', 'wallet') +
+        kpi('Target', money(tot.target), '#5e35b1', 'target', 'with adjustments') +
+        kpi('Estimate', money(tot.est.total), '#e0a800', 'trend', 'all statuses, not cancelled') +
+        kpi('Remaining', '<span class="' + (tot.target - tot.est.total < 0 ? 'neg' : '') + '">' + money(tot.target - tot.est.total) + '</span>', tot.target - tot.est.total < 0 ? '#d83a3a' : '#2e9e5b', 'check') +
+        kpi('Finance booked', fin ? money(finTot) : '—', '#0d2f5e', 'ledger', fin ? 'as of ' + esc(periodLabel(fin.period)) + ' (' + fin.months + ' mo.)' : (fin === null ? 'no statement yet for FY ' + esc(state.fy) : '')) +
+        kpi('Events over budget', String(overCount), overCount ? '#d83a3a' : '#2e9e5b', 'alert', 'of ' + evs.length + ' tracked') + '</div></div>';
       if (!evs.length) html += '<div class="empty">No tracked events with a budget or expenses in FY ' + esc(state.fy) + '.</div>';
       html += '<div class="event-cards">' + evs.map(function (e) {
         var x = e.expense;
-        return '<button class="event-card" data-ev="' + esc(e.eventId) + '"><h3><span>' + esc(e.name) + '</span>' +
-          (x.hasAdjusted ? '<span class="badge adj">adjusted</span>' : '') + '</h3>' +
+        var known = e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; });
+        var over = known && x.est.total > x.target + 0.005;
+        var pct = known && x.target > 0 ? Math.round(x.est.total / x.target * 100) : null;
+        return '<button class="event-card ' + (!known ? '' : over ? 'is-bad' : 'is-good') + '" data-ev="' + esc(e.eventId) + '"><h3><span>' + esc(e.name) +
+          (x.hasAdjusted ? ' <span class="badge adj">adjusted</span>' : '') + '</span>' +
+          '<span class="pct ' + (pct === null ? 'none' : over ? 'bad' : '') + '">' + (pct === null ? 'no budget' : pct + '%') + '</span></h3>' +
           '<div class="meter-label"><span>Expenses · ' + esc(e.expAcct) + '</span>' + (x.hasAdjusted ? '<span class="muted">Finance ' + money(x.budget) + '</span>' : '') + '</div>' +
-          meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) +
+          meter(x.est.total, x.target, 'expense', known) +
           '<div class="muted small">' + BUCKETS.filter(function (b) { return x.est[b.key]; }).map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
           (e.revenue.budget || e.revenue.estimate ? '<div class="meter-label" style="margin-top:.6rem"><span>Revenue · ' + esc(e.revAcct) + '</span></div>' +
             meter(e.revenue.estimate, e.revenue.budget, 'revenue', e.revenue.budget > 0, true) : '') +
+          (fin && e.finance ? finLine(e.finance, 'expense') : '') +
+          (e.prior && e.prior.expenditures !== null ? '<div class="prior">' + icon('clock').replace('class="ico"', 'class="ico" style="width:13px;height:13px;vertical-align:-2px"') +
+            ' FY ' + esc(e.prior.fy) + ' actual: spent ' + money(e.prior.expenditures) + (e.prior.revenue !== null ? ' · raised ' + money(e.prior.revenue) : '') + '</div>' : '') +
           (e.reviewCount ? '<div style="margin-top:.4rem"><span class="badge warn">' + e.reviewCount + ' need review</span></div>' : '') + '</button>';
       }).join('') + '</div></div>';
       view.innerHTML = html;
+      drawDonut($('#db-donut'), BUCKETS.map(function (b) { return { label: b.label, value: tot.est[b.key], color: b.color }; })
+        .concat([{ label: 'Left', value: Math.max(0, tot.target - tot.est.total), color: '#e3e9f2' }]));
       view.querySelectorAll('[data-ev]').forEach(function (b) {
         b.addEventListener('click', function () { setEvent(b.dataset.ev); location.hash = '#/dashboard/' + encodeURIComponent(b.dataset.ev); });
       });
@@ -560,8 +643,24 @@
       $('#db-rev').addEventListener('click', refreshRevenue);
     }).catch(showError);
   }
-  function kpi(k, v, color) {
-    return '<div class="kpi"' + (color ? ' style="border-left:5px solid ' + color + '"' : '') + '><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div></div>';
+  function kpi(k, v, color, ico, sub) {
+    return '<div class="kpi"' + (color ? ' style="--kc:' + color + '"' : '') + '>' + (ico ? '<div class="chip">' + icon(ico) + '</div>' : '') +
+      '<div><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div></div>';
+  }
+
+  function drawDonut(canvas, parts) {
+    if (!window.Chart || !canvas) return null;
+    parts = parts.filter(function (p) { return p.value > 0; });
+    if (!parts.length) parts = [{ label: 'Nothing yet', value: 1, color: '#e3e9f2' }];
+    var chart = new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels: parts.map(function (p) { return p.label; }),
+        datasets: [{ data: parts.map(function (p) { return Math.round(p.value); }), backgroundColor: parts.map(function (p) { return p.color; }), borderColor: '#fff', borderWidth: 2, hoverOffset: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '72%', animation: { duration: 700 },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.label + ': ' + money(c.parsed); } } } } }
+    });
+    state.charts.push(chart);
+    return chart;
   }
 
   function refreshRevenue() {
@@ -588,18 +687,31 @@
       var html = '<div class="stack"><div class="crumbs"><button data-go="#/dashboard">Dashboard</button> › <button data-go="#/dashboard/' + esc(eventId) + '">' + esc(e.name) + '</button>' +
         (sub ? ' › <span>' + esc(sub) + '</span>' : '') + '</div>' +
         '<h1>' + esc(e.name) + '</h1>' +
-        '<div class="kpis">' + kpi('Expense account', esc(e.expAcct || '—')) + kpi('Budget', money(x.budget)) +
-        (x.hasAdjusted ? kpi('Adjusted target', money(x.target)) : '') + kpi('Estimate', money(x.est.total)) + kpi('Remaining', money(x.remaining)) + '</div>' +
-        '<div class="card">' + meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) + '</div>' +
+        '<div class="kpis">' + kpi('Expense account', esc(e.expAcct || '—'), '#185097', 'hash') + kpi('Budget', money(x.budget), '#185097', 'wallet') +
+        (x.hasAdjusted ? kpi('Adjusted target', money(x.target), '#5e35b1', 'target') : '') + kpi('Estimate', money(x.est.total), '#e0a800', 'trend') +
+        kpi('Remaining', '<span class="' + (x.remaining < 0 ? 'neg' : '') + '">' + money(x.remaining) + '</span>', x.remaining < 0 ? '#d83a3a' : '#2e9e5b', 'check') +
+        (e.finance !== undefined ? kpi('Finance booked', e.finance ? money(e.finance.expYtd) : '—', '#0d2f5e', 'ledger',
+          e.finance ? 'as of ' + esc(periodLabel(e.finance.period)) + ' (' + e.finance.months + ' mo.)' : 'no statement yet') : '') + '</div>' +
+        '<div class="drill-top"><div class="card"><div class="meter-label"><span>Spent vs budget</span></div>' +
+        meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) +
+        '<div class="muted small" style="margin-top:.5rem">' + BUCKETS.map(function (b) { return bucketDot(b) + esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
+        (e.revenue.budget || e.revenue.estimate ? '<div class="meter-label" style="margin-top:1rem"><span>Revenue · ' + esc(e.revAcct) + '</span></div>' +
+          meter(e.revenue.estimate, e.revenue.budget, 'revenue', e.revenue.budget > 0) : '') +
+        (e.finance !== undefined ? finLine(e.finance, 'expense', x.est.total) : '') + '</div>' +
+        '<div class="card donut-card"><div class="donut"><canvas id="dr-donut" aria-label="Estimate by category"></canvas><div class="center"><b>' + money(x.est.total) + '</b><span>by category</span></div></div>' +
+        '<div class="legend">' + e.categories.filter(function (c) { return c.estimate > 0; }).map(function (c) {
+          return '<span><i style="background:' + (CATEGORY_COLOR[c.cat] || '#9e9e9e') + '"></i>' + esc(c.cat) + '</span>'; }).join('') + '</div></div></div>' +
         (x.hasAdjusted && x.adjustmentNote ? '<div class="notice">' + esc(x.adjustmentNote) + '</div>' : '');
       if (!sub) {
         var lines = e.lines.filter(function (l) { return l.side === 'Expense'; });
-        html += '<div class="table-wrap"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Target</th>' +
-          BUCKETS.map(function (b) { return '<th class="num">' + bucketDot(b) + esc(b.label) + '</th>'; }).join('') + '<th class="num">Remaining</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
+        // Status buckets show as a thin colored bar under each estimate, so the table fits without scrolling.
+        html += '<div class="table-wrap cards"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">' + (x.hasAdjusted ? 'Target' : 'Budget') + '</th>' +
+          '<th class="num">Estimate</th><th class="num">Remaining</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
           lines.map(function (l) {
-            return '<tr class="click" data-sub="' + esc(l.sub || '-') + '"><td><b>' + esc(l.sub || '—') + '</b><div class="muted">' + esc(l.label) + '</div></td><td>' + esc(l.cat) + '</td>' +
-              (l.budgetKnown ? moneyCell(l.budget) + moneyCell(l.target) : '<td class="num muted">not set</td><td class="num muted">—</td>') +
-              BUCKETS.map(function (b) { return moneyCell(l.est[b.key]); }).join('') + (l.budgetKnown ? moneyCell(l.remaining) : '<td class="num muted">—</td>') +
+            return '<tr class="click" data-sub="' + esc(l.sub || '-') + '"><td><b>' + esc(l.sub || '—') + '</b><div class="sub-line">' + esc(l.label) + '</div></td><td>' + catTag(l.cat) + '</td>' +
+              (l.budgetKnown ? '<td class="num">' + money(l.target) + (l.adjusted !== null ? '<div class="sub-line">Finance ' + money(l.budget) + '</div>' : '') + '</td>' : '<td class="num muted">not set</td>') +
+              '<td class="num">' + money(l.est.total) + mixBar(l.est) + '</td>' +
+              (l.budgetKnown ? moneyCell(l.remaining) : '<td class="num muted">—</td>') +
               '<td class="meter-col">' + meter(l.est.total, l.target, 'expense', l.budgetKnown, true) + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       }
@@ -607,6 +719,7 @@
       html += '<h2>' + (sub ? 'Expenses on ' + esc(sub === '-' ? 'no sub-account' : sub) : 'All expenses') + ' (' + list.length + ')</h2>' + expenseTable(list) +
         '<div class="btn-row"><a class="btn" href="#/add/' + encodeURIComponent(eventId) + '">Add expense</a><a class="btn secondary" href="#/report/' + encodeURIComponent(eventId) + '">Event report</a></div></div>';
       view.innerHTML = html;
+      drawDonut($('#dr-donut'), e.categories.map(function (c) { return { label: c.cat, value: c.estimate, color: CATEGORY_COLOR[c.cat] || '#9e9e9e' }; }));
       view.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { location.hash = b.dataset.go; }); });
       view.querySelectorAll('tr[data-sub]').forEach(function (tr) {
         tr.addEventListener('click', function () { location.hash = '#/dashboard/' + encodeURIComponent(eventId) + '/' + encodeURIComponent(tr.dataset.sub); });
@@ -618,17 +731,19 @@
   function expenseTable(list, extraCols) {
     if (!list.length) return '<div class="empty">Nothing here.</div>';
     extraCols = extraCols || [];
-    return '<div class="table-wrap"><table><thead><tr><th>ID</th><th>Date</th>' + (extraCols.indexOf('event') >= 0 ? '<th>Event</th>' : '') +
-      '<th>Vendor / description</th><th>Category</th><th>Sub</th><th class="num">Estimate</th><th>Status</th><th>PO</th>' +
+    // ID sits under the date and the sub-account under the category, so the table fits without scrolling.
+    return '<div class="table-wrap cards"><table><thead><tr><th>Date</th>' + (extraCols.indexOf('event') >= 0 ? '<th>Event</th>' : '') +
+      '<th>Vendor / description</th><th>Category</th><th class="num">Estimate</th><th>Status</th><th>PO</th>' +
       (extraCols.indexOf('actual') >= 0 ? '<th class="num">Actual (phase 2)</th>' : '') + '<th></th></tr></thead><tbody>' +
       list.map(function (r) {
-        return '<tr' + (r.status === 'Cancelled' ? ' class="cancelled"' : '') + '><td>' + esc(r.id) + (r.review === true ? ' <span class="badge warn">review</span>' : '') + '</td><td class="num">' + esc(r.date) + '</td>' +
+        return '<tr' + (r.status === 'Cancelled' ? ' class="cancelled"' : '') + '><td class="num">' + esc(r.date || '—') + '<div class="sub-line">' + esc(r.id) + '</div>' +
+          (r.review === true ? '<span class="badge warn">review</span>' : '') + '</td>' +
           (extraCols.indexOf('event') >= 0 ? '<td>' + esc(r.eventName || r.eventId) + '</td>' : '') +
-          '<td><b>' + esc(r.vendor || '—') + '</b><div class="muted">' + esc(r.description) + '</div>' + (r.review === true && r.notes ? '<div class="muted" style="font-size:.82rem">' + esc(r.notes) + '</div>' : '') + '</td>' +
-          '<td>' + catTag(r.cat) + '</td><td>' + esc(r.sub || '—') + '</td>' + '<td class="num amt">' + money(r.amount, true) + '</td><td>' + statusBadge(r.status) + '</td>' +
+          '<td class="lead wrap-any"><b>' + esc(r.vendor || '—') + '</b><div class="sub-line">' + esc(r.description) + '</div>' + (r.review === true && r.notes ? '<div class="sub-line">' + esc(r.notes) + '</div>' : '') + '</td>' +
+          '<td>' + catTag(r.cat) + '<div class="sub-line">Sub ' + esc(r.sub || '—') + '</div></td>' + '<td class="num amt">' + money(r.amount, true) + '</td><td>' + statusBadge(r.status) + '</td>' +
           '<td>' + (r.po ? esc(r.po) : (r.poDone === true ? '✓' : '—')) + '</td>' +
           (extraCols.indexOf('actual') >= 0 ? '<td class="num muted">—</td>' : '') +
-          '<td><button class="link" data-edit="' + esc(r.id) + '" data-fy="' + esc(r.fy) + '">Edit</button></td></tr>';
+          '<td data-label=""><button class="link" data-edit="' + esc(r.id) + '" data-fy="' + esc(r.fy) + '">Edit</button></td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function bindEdit() {
@@ -802,7 +917,7 @@
       var section = function (title, help, body, count) {
         return '<section class="stack"><h2>' + esc(title) + ' <span class="badge' + (count ? ' warn' : '') + '">' + count + '</span></h2><p class="muted" style="margin:0">' + esc(help) + '</p>' + body + '</section>';
       };
-      var over = r.overBudget.length ? '<div class="table-wrap"><table><thead><tr><th>Event</th><th>Sub-account</th><th>Category</th><th class="num">Target</th><th class="num">Estimate</th><th class="num">Over by</th><th class="num">Actual (phase 2)</th></tr></thead><tbody>' +
+      var over = r.overBudget.length ? '<div class="table-wrap cards"><table><thead><tr><th>Event</th><th>Sub-account</th><th>Category</th><th class="num">Target</th><th class="num">Estimate</th><th class="num">Over by</th><th class="num">Actual (phase 2)</th></tr></thead><tbody>' +
         r.overBudget.map(function (o) {
           return '<tr class="click" data-go="#/dashboard/' + esc(o.eventId) + '/' + esc(o.sub) + '"><td>' + esc(o.eventName) + '</td><td><b>' + esc(o.sub) + '</b><div class="muted">' + esc(o.label) + '</div></td><td>' + esc(o.cat) + '</td>' +
             moneyCell(o.target) + moneyCell(o.estimate, true) + '<td class="num neg">' + money(o.over, true) + '</td><td class="num muted">—</td></tr>';
@@ -852,7 +967,7 @@
           profit: main ? main.revenue - main.expenditures : null, budget: g.Budget || null, source: main ? main.source : (g.Budget ? g.Budget.source : '') };
       });
       body.innerHTML = '<div class="chart-box" style="height:320px"><canvas id="hs-chart"></canvas></div>' +
-        '<div class="table-wrap"><table><thead><tr><th>FY</th><th>Type</th><th class="num">Revenue</th><th class="num">Expenditures</th><th class="num">Profit</th>' +
+        '<div class="table-wrap cards"><table><thead><tr><th>FY</th><th>Type</th><th class="num">Revenue</th><th class="num">Expenditures</th><th class="num">Profit</th>' +
         '<th class="num">Budget rev.</th><th class="num">Budget exp.</th><th>Source</th></tr></thead><tbody>' +
         pick.map(function (o) {
           return '<tr><td><b>' + esc(o.fy) + '</b></td><td>' + esc(o.type) + '</td>' + moneyCell(o.rev) + moneyCell(o.exp) + moneyCell(o.profit) +
