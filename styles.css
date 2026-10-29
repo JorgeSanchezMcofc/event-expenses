@@ -97,13 +97,33 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
 .answer .meta { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-top: .4rem; }
 .answer .meta b { display: block; font-size: 1.2rem; }
 
+/* budget meters: fill vs a budget line */
+.meter { position: relative; height: 16px; background: #eef1f5; border-radius: 999px; margin: .55rem 0 .3rem; overflow: visible; }
+.meter.compact { height: 10px; margin: .35rem 0 .2rem; }
+.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.meter.good .fill { background: #2e9e5b; }
+.meter.bad .fill { background: #d83a3a; }
+.meter.short .fill { background: #F2C14E; }
+.meter .mark { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
+.meter.compact .mark { top: -4px; bottom: -4px; width: 2px; margin-left: -1px; }
+.meter-cap { font-size: .86rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.meter-col { min-width: 190px; }
+.meter-col .meter-cap { font-size: .8rem; white-space: nowrap; }
+.meter-label { display: flex; justify-content: space-between; gap: .5rem; font-size: .85rem; font-weight: 500; margin-top: .4rem; }
+.small { font-size: .8rem; }
+.code-box .total { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .6rem; margin-top: .6rem; }
+.code-box .total .k { flex-basis: 100%; }
+.code-box .total b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.answer .meter-cap { font-size: .95rem; }
+
 /* dashboard */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; }
 .kpi { border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem 1rem; }
 .kpi .k { font-size: .8rem; color: var(--muted); }
 .kpi .v { font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .event-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .75rem; }
-.event-card { border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1rem; cursor: pointer; background: #fff; text-align: left; width: 100%; }
+.event-card { display: flex; flex-direction: column; justify-content: flex-start; border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1rem; cursor: pointer; background: #fff; text-align: left; width: 100%; }
+.event-card > * { width: 100%; }
 .event-card:hover { border-color: #b9c6db; }
 .event-card h3 { font-size: 1rem; display: flex; justify-content: space-between; gap: .5rem; }
 .bar { position: relative; height: 14px; background: var(--soft); border-radius: 999px; overflow: hidden; display: flex; margin: .6rem 0 .4rem; }

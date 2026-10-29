@@ -73,6 +73,30 @@ function startServer(port, token) {
         const num = s => Number((/\$([\d,]+) of/.exec(s) || [0, '0'])[1].replace(/,/g, ''));
         ok('[desktop] Dashboard updates after adding (no Sheet reload)', num(after) - num(before) === 2500, `${num(before)} → ${num(after)}`);
 
+        ok('[desktop] Over-budget event shows a red bar with a budget line',
+          !!(await page.$('.event-card[data-ev="BANQUET"] .meter.bad .mark')));
+        ok('[desktop] Event within budget shows a green bar',
+          !!(await page.$('.event-card .meter.good')));
+
+        // Fix an amount: find the expense from Lookup and change 2,500 to 2,490.
+        await page.goto(base + '#/lookup');
+        await page.selectOption('#lk-event', 'BANQUET');
+        await page.waitForSelector('#lk-q');
+        const totals = await page.textContent('.big-codes');
+        ok('[desktop] Lookup shows total expense and revenue budgets', totals.includes(usd(B.expAdjusted)) && /Revenue budget/.test(totals), totals.replace(/\s+/g, ' ').slice(0, 160));
+        await page.fill('#lk-q', 'E2E Vendor');
+        await page.waitForTimeout(100);
+        await page.screenshot({ path: `${OUT}/desktop-1b-lookup-find.png`, fullPage: true });
+        await page.click('#lk-exp [data-edit]');
+        await page.waitForSelector('#xf-cancel');
+        await page.fill('input[name=amount]', '2490');
+        await page.click('button[type=submit]');
+        await page.waitForSelector('#xf-result .notice.ok');
+        await page.goto(base + '#/dashboard');
+        await page.waitForSelector('.event-card[data-ev="BANQUET"]');
+        const edited = await page.textContent('.event-card[data-ev="BANQUET"]');
+        ok('[desktop] Editing an amount updates the dashboard', num(edited) - num(before) === 2490, `${num(before)} → ${num(edited)}`);
+
         await page.click('.event-card[data-ev="BANQUET"]');
         await page.waitForSelector(`tr[data-sub="${B.fbSub}"]`);
         await page.click(`tr[data-sub="${B.fbSub}"]`);

@@ -248,43 +248,100 @@
     var ev = cat.events.filter(function (e) { return e.id === state.event; })[0];
     if (!ev) { body.innerHTML = '<div class="empty">Pick an event to see its accounts.</div>'; return; }
     body.innerHTML = '<div class="loading">Loading budget…</div>';
-    eventSummary(state.fy, ev.id).then(function (s) { if (nav !== state.nav) return;
+    Promise.all([eventSummary(state.fy, ev.id), api('expenses', { fy: state.fy, event: ev.id })]).then(function (res) {
+      if (nav !== state.nav) return;
+      var s = res[0], rows = res[1];
       var exp = cat.lines.filter(function (l) { return l.eventId === ev.id && l.side === 'Expense'; });
       var cats = categoriesFor(cat, ev.id);
+      var x = s ? s.expense : null, r = s ? s.revenue : null;
       var html = '<div class="big-codes">' +
-        '<div class="code-box"><div class="k">Expense account</div><div class="v">' + esc(ev.expAcct || '—') + '</div></div>' +
-        '<div class="code-box rev"><div class="k">Revenue account</div><div class="v">' + esc(ev.revAcct || '—') + '</div></div></div>';
+        '<div class="code-box"><div class="k">Expense account</div><div class="v">' + esc(ev.expAcct || '—') + '</div>' +
+        (x ? '<div class="total"><span class="k">' + (x.hasAdjusted ? 'Expense budget (adjusted)' : 'Expense budget') + '</span><b>' + money(x.target) + '</b>' +
+          (x.hasAdjusted ? '<span class="muted">Finance: ' + money(x.budget) + '</span>' : '') + '</div>' +
+          meter(x.est.total, x.target, 'expense', exp.some(function (l) { return l.budget !== '' || l.adjusted !== ''; })) +
+          '<div class="muted small">' + BUCKETS.map(function (b) { return esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' : '') + '</div>' +
+        '<div class="code-box rev"><div class="k">Revenue account</div><div class="v">' + esc(ev.revAcct || '—') + '</div>' +
+        (r ? '<div class="total"><span class="k">Revenue budget</span><b>' + money(r.budget) + '</b></div>' +
+          meter(r.estimate, r.budget, 'revenue', r.budget > 0) +
+          '<div class="muted small">From the event\'s revenue sheet' + (r.inkind ? ' · in-kind ' + money(r.inkind) : '') + '</div>' : '') + '</div></div>';
       if (ev.notes) html += '<p class="muted">' + esc(ev.notes) + '</p>';
+      if (x && x.hasAdjusted && x.adjustmentNote) html += '<div class="notice">' + esc(x.adjustmentNote) + '</div>';
       if (cats.length) {
         html += '<div><h2>Pick a category</h2><div class="pills" id="lk-cats">' + cats.map(function (c) {
           return '<button class="pill' + (c === pickedCat ? ' active' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
         }).join('') + '</div></div><div id="lk-answer"></div>';
       }
       if (exp.length) {
-        html += '<h2>All sub-accounts</h2><div class="table-wrap"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="hide-sm">Finance label</th>' +
-          '<th class="num">Budget</th><th class="num">Remaining</th></tr></thead><tbody>' +
+        html += '<h2>All sub-accounts</h2><div class="table-wrap"><table class="lines"><thead><tr><th>Sub-account</th><th>Category</th><th class="hide-sm">Finance label</th>' +
+          '<th class="num">Budget</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
           exp.map(function (l) {
             var st = lineStats(s, l.sub);
-            var target = st ? st.target : (l.adjusted !== '' ? l.adjusted : l.budget);
-            var rem = st ? st.remaining : target;
+            var target = st ? st.target : Number(l.adjusted !== '' ? l.adjusted : l.budget || 0);
+            var spent = st ? st.est.total : 0;
             var known = l.budget !== '' || l.adjusted !== '';
-            return '<tr data-sub="' + esc(l.sub) + '"><td><b>' + esc(l.sub) + '</b></td><td>' + esc(l.cat) + '</td><td>' + esc(l.label) + '</td>' +
+            return '<tr class="click" data-sub="' + esc(l.sub) + '"><td><b>' + esc(l.sub) + '</b></td><td>' + esc(l.cat) + '</td><td class="hide-sm">' + esc(l.label) + '</td>' +
               '<td class="num">' + (known ? money(target) : '<span class="muted">not set</span>') +
-              (l.adjusted !== '' && l.adjusted !== null ? ' <span class="badge adj">adjusted</span>' : '') + '</td>' +
-              (known ? moneyCell(rem) : '<td class="num muted">—</td>') + '</tr>';
+              (l.adjusted !== '' && l.adjusted !== null ? '<div><span class="badge adj">adjusted</span></div>' : '') + '</td>' +
+              '<td class="meter-col">' + meter(spent, target, 'expense', known, true) + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       } else {
         html += '<div class="empty">No expense sub-accounts for this event in FY ' + esc(state.fy) + '.</div>';
       }
+      html += '<div class="row" style="align-items:center;margin-top:1.5rem"><h2 style="flex:1 1 auto;margin:0">Expenses <span class="muted" id="lk-count"></span></h2>' +
+        '<div class="btn-row" style="flex:0 0 auto"><a class="btn secondary" href="#/add/' + encodeURIComponent(ev.id) + '">Add expense</a></div></div>' +
+        '<div class="row"><label class="field"><span>Find (vendor, description, amount, ID)</span><input id="lk-q" type="search" placeholder="e.g. photographer or 500"></label>' +
+        '<label class="field" style="flex:0 1 220px"><span>Sub-account</span><select id="lk-sub"><option value="">All</option>' +
+        exp.map(function (l) { return '<option value="' + esc(l.sub) + '">' + esc(l.sub + ' · ' + l.cat) + '</option>'; }).join('') + '</select></label></div>' +
+        '<div id="lk-exp"></div>';
       body.innerHTML = html;
+      var drawExp = function () {
+        var q = $('#lk-q').value.trim().toLowerCase(), sub = $('#lk-sub').value;
+        var list = rows.filter(function (e) {
+          if (sub && e.sub !== sub) return false;
+          if (!q) return true;
+          return [e.id, e.vendor, e.description, e.cat, e.notes, e.amount, money(e.amount, true)].join(' ').toLowerCase().indexOf(q) >= 0;
+        }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+        $('#lk-count').textContent = '(' + list.length + ')';
+        $('#lk-exp').innerHTML = expenseTable(list);
+        bindEdit();
+      };
+      $('#lk-q').addEventListener('input', drawExp);
+      $('#lk-sub').addEventListener('change', drawExp);
+      body.querySelectorAll('tr[data-sub]').forEach(function (tr) {
+        tr.addEventListener('click', function () {
+          $('#lk-sub').value = tr.dataset.sub; drawExp();
+          $('#lk-q').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+      drawExp();
       body.querySelectorAll('[data-cat]').forEach(function (b) {
         b.addEventListener('click', function () {
-          body.querySelectorAll('[data-cat]').forEach(function (x) { x.classList.toggle('active', x === b); });
+          body.querySelectorAll('[data-cat]').forEach(function (y) { y.classList.toggle('active', y === b); });
           showAnswer(cat, ev, s, b.dataset.cat);
         });
       });
       if (pickedCat) showAnswer(cat, ev, s, pickedCat);
     }).catch(function (e) { body.innerHTML = '<div class="notice warn">' + esc(e.message) + '</div>'; });
+  }
+
+  /**
+   * Fill bar against a budget line. Expenses: green while at or under budget, red once over.
+   * Revenue: green once the goal is met, gold while short of it.
+   */
+  function meter(value, target, kind, known, compact) {
+    value = Number(value || 0); target = Number(target || 0);
+    if (!known) return '<div class="meter-cap muted">' + (value ? money(value, true) + ' · no budget set' : 'No budget set') + '</div>';
+    var over = value > target + 0.005;
+    var scale = Math.max(target, value) * 1.1 || 1;
+    var fill = Math.min(100, value / scale * 100), mark = target / scale * 100;
+    var pct = target > 0 ? Math.round(value / target * 100) : (value > 0 ? 999 : 0);
+    var cls = kind === 'revenue' ? (value >= target && target > 0 ? 'good' : 'short') : (over ? 'bad' : 'good');
+    var cap;
+    if (kind === 'revenue') cap = money(value) + ' of ' + money(target) + ' · ' + pct + '%' + (value < target ? ' · ' + money(target - value) + ' to go' : ' · goal met');
+    else cap = money(value) + ' of ' + money(target) + ' · ' + (over ? '<b class="neg">' + money(value - target) + ' over</b>' : money(target - value) + ' left');
+    return '<div class="meter ' + cls + (compact ? ' compact' : '') + '" role="img" aria-label="' + esc(cap.replace(/<[^>]+>/g, '')) + '">' +
+      '<span class="fill" style="width:' + fill.toFixed(2) + '%"></span><i class="mark" style="left:' + mark.toFixed(2) + '%" title="Budget ' + esc(money(target)) + '"></i></div>' +
+      '<div class="meter-cap">' + cap + '</div>';
   }
 
   function showAnswer(cat, ev, s, category) {
@@ -301,6 +358,7 @@
       '<div><span class="muted">' + (l.adjusted !== '' ? 'Adjusted target' : 'Budget') + '</span><b>' + (known ? money(target) : 'not set') + '</b></div>' +
       (l.adjusted !== '' ? '<div><span class="muted">Official budget</span><b>' + money(l.budget) + '</b></div>' : '') +
       '<div><span class="muted">Remaining</span><b class="' + (st && st.remaining < 0 ? 'neg' : '') + '">' + (known && st ? money(st.remaining) : '—') + '</b></div></div>' +
+      '<div style="margin-top:.6rem">' + meter(st ? st.est.total : 0, target, 'expense', known) + '</div>' +
       (found.why ? '<p class="muted" style="margin:.5rem 0 0">' + esc(found.why) + '</p>' : '') +
       '<div class="btn-row" style="margin-top:.75rem"><a class="btn" href="#/add/' + encodeURIComponent(ev.id) + '/' + encodeURIComponent(category) + '">Add expense here</a></div></div>';
   }
@@ -441,18 +499,6 @@
 
   /* ------------------------------------------------------------ 3. Dashboard */
 
-  function stackBar(est, target) {
-    var max = Math.max(target, est.total, 1);
-    var segs = BUCKETS.map(function (b) {
-      var w = est[b.key] / max * 100;
-      return w > 0 ? '<span class="' + b.cls + '" style="width:' + w.toFixed(2) + '%" title="' + esc(b.label + ': ' + money(est[b.key], true)) + '"></span>' : '';
-    }).join('');
-    return '<div class="bar">' + segs + (est.total > target + 0.005 && target > 0 ? '<i class="over" title="Over target"></i>' : '') + '</div>';
-  }
-  function legend() {
-    return '<div class="legend">' + BUCKETS.map(function (b) { return '<span><i style="background:' + b.color + '"></i>' + esc(b.label) + '</span>'; }).join('') + '</div>';
-  }
-
   function renderDashboard(args) {
     var nav = state.nav; // async callbacks below stop if the user navigates away
     loading();
@@ -471,16 +517,17 @@
         '<div class="kpis">' +
         kpi('Budget (Finance)', money(tot.budget)) + kpi('Target (with adjustments)', money(tot.target)) +
         kpi('Estimate (all statuses)', money(tot.est.total)) + kpi('Remaining', money(tot.target - tot.est.total)) + '</div>' +
-        '<div class="kpis">' + BUCKETS.map(function (b) { return kpi(b.label, money(tot.est[b.key])); }).join('') + '</div>' + legend();
+        '<div class="kpis">' + BUCKETS.map(function (b) { return kpi(b.label, money(tot.est[b.key])); }).join('') + '</div>';
       if (!evs.length) html += '<div class="empty">No tracked events with a budget or expenses in FY ' + esc(state.fy) + '.</div>';
       html += '<div class="event-cards">' + evs.map(function (e) {
         var x = e.expense;
         return '<button class="event-card" data-ev="' + esc(e.eventId) + '"><h3><span>' + esc(e.name) + '</span>' +
           (x.hasAdjusted ? '<span class="badge adj">adjusted</span>' : '') + '</h3>' +
-          '<div class="split"><span class="muted">' + esc(e.expAcct) + '</span><span>' + money(x.est.total) + ' of ' + money(x.target) + '</span></div>' +
-          stackBar(x.est, x.target) +
-          '<div class="split"><span class="muted">Budget ' + money(x.budget) + (x.hasAdjusted ? ' · target ' + money(x.target) : '') + '</span>' +
-          '<span class="' + (x.remaining < 0 ? 'neg' : '') + '">Remaining ' + money(x.remaining) + '</span></div>' +
+          '<div class="meter-label"><span>Expenses · ' + esc(e.expAcct) + '</span>' + (x.hasAdjusted ? '<span class="muted">Finance ' + money(x.budget) + '</span>' : '') + '</div>' +
+          meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) +
+          '<div class="muted small">' + BUCKETS.filter(function (b) { return x.est[b.key]; }).map(function (b) { return esc(b.label) + ' ' + money(x.est[b.key]); }).join(' · ') + '</div>' +
+          (e.revenue.budget || e.revenue.estimate ? '<div class="meter-label" style="margin-top:.6rem"><span>Revenue · ' + esc(e.revAcct) + '</span></div>' +
+            meter(e.revenue.estimate, e.revenue.budget, 'revenue', e.revenue.budget > 0, true) : '') +
           (e.reviewCount ? '<div style="margin-top:.4rem"><span class="badge warn">' + e.reviewCount + ' need review</span></div>' : '') + '</button>';
       }).join('') + '</div></div>';
       view.innerHTML = html;
@@ -519,15 +566,17 @@
         '<h1>' + esc(e.name) + '</h1>' +
         '<div class="kpis">' + kpi('Expense account', esc(e.expAcct || '—')) + kpi('Budget', money(x.budget)) +
         (x.hasAdjusted ? kpi('Adjusted target', money(x.target)) : '') + kpi('Estimate', money(x.est.total)) + kpi('Remaining', money(x.remaining)) + '</div>' +
-        (x.hasAdjusted && x.adjustmentNote ? '<div class="notice">' + esc(x.adjustmentNote) + '</div>' : '') + legend();
+        '<div class="card">' + meter(x.est.total, x.target, 'expense', e.lines.some(function (l) { return l.side === 'Expense' && l.budgetKnown; })) + '</div>' +
+        (x.hasAdjusted && x.adjustmentNote ? '<div class="notice">' + esc(x.adjustmentNote) + '</div>' : '');
       if (!sub) {
         var lines = e.lines.filter(function (l) { return l.side === 'Expense'; });
         html += '<div class="table-wrap"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Target</th>' +
-          BUCKETS.map(function (b) { return '<th class="num">' + esc(b.label) + '</th>'; }).join('') + '<th class="num">Remaining</th></tr></thead><tbody>' +
+          BUCKETS.map(function (b) { return '<th class="num">' + esc(b.label) + '</th>'; }).join('') + '<th class="num">Remaining</th><th class="meter-col">Spent vs budget</th></tr></thead><tbody>' +
           lines.map(function (l) {
             return '<tr class="click" data-sub="' + esc(l.sub || '-') + '"><td><b>' + esc(l.sub || '—') + '</b><div class="muted">' + esc(l.label) + '</div></td><td>' + esc(l.cat) + '</td>' +
               (l.budgetKnown ? moneyCell(l.budget) + moneyCell(l.target) : '<td class="num muted">not set</td><td class="num muted">—</td>') +
-              BUCKETS.map(function (b) { return moneyCell(l.est[b.key]); }).join('') + (l.budgetKnown ? moneyCell(l.remaining) : '<td class="num muted">—</td>') + '</tr>';
+              BUCKETS.map(function (b) { return moneyCell(l.est[b.key]); }).join('') + (l.budgetKnown ? moneyCell(l.remaining) : '<td class="num muted">—</td>') +
+              '<td class="meter-col">' + meter(l.est.total, l.target, 'expense', l.budgetKnown, true) + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       }
       var list = rows.filter(function (r) { return !sub || (sub === '-' ? !r.sub : r.sub === sub); });
