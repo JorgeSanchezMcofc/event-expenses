@@ -124,18 +124,24 @@ function startServer(port, token) {
       // Budgets: side → events → account → sub-accounts
       await page.goto(base + '#/budgets');
       await page.click('a.choice[href="#/budgets/expense"]');
-      await page.waitForSelector('a.choice[href="#/budgets/expense/events"]');
-      await page.click('a.choice[href="#/budgets/expense/events"]');
-      await page.waitForSelector('tr[data-go$="/BANQUET"]');
+      await page.waitForSelector('tr[data-go="#/budgets/expense/BANQUET"]');
+      ok(`[${vp.name}] Expenses list shows events and programs together`, (await page.textContent('main')).includes('program'));
       ok(`[${vp.name}] Budgets list has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
       await page.screenshot({ path: `${OUT}/${vp.name}-7-budgets.png`, fullPage: true });
-      await page.click('tr[data-go$="/BANQUET"]');
+      await page.click('tr[data-go="#/budgets/expense/BANQUET"]');
       await page.waitForSelector('text=Sub-accounts');
       const bud = await page.textContent('main');
       ok(`[${vp.name}] Budgets account shows Budget / Actual / Pending and sub-accounts`,
         bud.includes(usd(B.expAdjusted)) && /Pending to spend/.test(bud) && bud.includes(B.fbSub), bud.replace(/\s+/g, ' ').slice(0, 160));
       ok(`[${vp.name}] Budgets account has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
       await page.screenshot({ path: `${OUT}/${vp.name}-7b-budget-account.png`, fullPage: true });
+
+      await page.goto(base + '#/budgets');
+      await page.click('a.choice[href="#/budgets/all"]');
+      await page.waitForSelector('text=Net actual');
+      const all = await page.textContent('main');
+      ok(`[${vp.name}] Budgets All shows revenue and expense accounts`, /Revenues/.test(all) && /Expenses/.test(all) && all.includes(B.acct));
+      ok(`[${vp.name}] Budgets All has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
 
       // Budgets → one event: revenue vs expenses
       await page.goto(base + '#/budgets');
@@ -145,7 +151,8 @@ function startServer(port, token) {
       await page.click('tr[data-go$="/compare/BANQUET"]');
       await page.waitForSelector('text=Revenue budget');
       const cmp = await page.textContent('main');
-      ok(`[${vp.name}] Event compare shows revenue, expenses and net`, /Revenue budget/.test(cmp) && cmp.includes(usd(B.expAdjusted)) && /Net actual/.test(cmp), cmp.replace(/\s+/g, ' ').slice(0, 160));
+      ok(`[${vp.name}] Event compare shows revenue, expenses, net and both sub-account tables`, /Revenue budget/.test(cmp) && cmp.includes(usd(B.expAdjusted)) && /Net actual/.test(cmp) &&
+        /Revenue sub-accounts/.test(cmp) && cmp.includes(B.fbSub) && !(await page.$('main .btn')), cmp.replace(/\s+/g, ' ').slice(0, 160));
       ok(`[${vp.name}] Event compare has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
       await page.screenshot({ path: `${OUT}/${vp.name}-7c-compare.png`, fullPage: true });
 

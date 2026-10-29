@@ -255,6 +255,7 @@ tr.cancelled td.amt { text-decoration: line-through; }
 .choice:hover { transform: translateY(-2px); box-shadow: var(--shadow-hi); }
 .choice .chip { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, #fff); margin-bottom: .3rem; }
 .choice b { font-size: 1.35rem; }
+.choices.four { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
 
 /* report: matches the old Report Master tab */
 .report { background: #fff; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
