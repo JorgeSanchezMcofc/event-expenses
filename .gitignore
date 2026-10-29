@@ -1,0 +1,7 @@
+# Test fixtures and outputs hold real Sheet data. Never commit them.
+test/fixture*.json
+test/out/
+*.xlsx
+node_modules/
+.DS_Store
+test/acceptance.local.json

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#185097">
+  <title>Event Expense Tracker</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/icon.svg" alt="" width="28" height="28">
+      <span>Event Expense Tracker</span>
+    </div>
+    <div class="topbar-right">
+      <label class="fy-pick">FY
+        <select id="fy" aria-label="Fiscal year"></select>
+      </label>
+      <button id="signout" class="link" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" hidden>
+    <a href="#/lookup" data-route="lookup">Lookup</a>
+    <a href="#/add" data-route="add">Add expense</a>
+    <a href="#/dashboard" data-route="dashboard">Dashboard</a>
+    <a href="#/report" data-route="report">Report</a>
+    <a href="#/missing" data-route="missing">What's missing</a>
+    <a href="#/history" data-route="history">History</a>
+  </nav>
+
+  <main id="view">
+    <section class="signin" id="signin">
+      <h1>Sign in</h1>
+      <p>Use your McAllen Chamber Google account.</p>
+      <div id="gsi-button"></div>
+      <p class="muted" id="signin-msg"></p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="assets/vendor/chart-4.4.1.umd.js"></script>
+  <script src="assets/vendor/html2pdf-0.10.1.bundle.min.js" defer></script>
+  <script src="app.js"></script>
+</body>
+</html>
