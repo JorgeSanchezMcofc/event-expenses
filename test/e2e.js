@@ -143,6 +143,11 @@ function startServer(port, token) {
       ok(`[${vp.name}] Budgets All shows revenue and expense accounts`, /Revenues/.test(all) && /Expenses/.test(all) && all.includes(B.acct));
       ok(`[${vp.name}] Budgets All has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
 
+      await page.goto(base + '#/budgets/revenue');
+      await page.waitForSelector('tr[data-go="#/budgets/revenue/BANQUET"]');
+      const bq = await page.textContent('tr[data-go="#/budgets/revenue/BANQUET"]');
+      ok(`[${vp.name}] Revenue account with a budget never says "No budget set"`, !/No budget set/.test(bq) && /\$165,000|Budget/.test(bq), bq.replace(/\s+/g, ' ').slice(0, 140));
+
       // Budgets → one event: revenue vs expenses
       await page.goto(base + '#/budgets');
       await page.click('a.choice[href="#/budgets/compare"]');

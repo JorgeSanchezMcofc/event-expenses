@@ -775,6 +775,12 @@
       : d.finance ? 'Actual = Finance YTD as of ' + esc(periodLabel(d.finance.period)) + ' (' + d.finance.months + ' mo.); per sub-account actuals need the Sage detail.'
       : 'No actuals yet for FY ' + esc(state.fy) + '.');
   }
+  // Progress bar for Budgets: a budget with no actuals yet is still a budget.
+  function budgetMeter(actual, budget, kind, compact) {
+    if (budget === null || budget === undefined) return meter(actual || 0, 0, kind, false, compact);
+    if (actual === null || actual === undefined) return '<div class="meter-cap muted">Budget ' + money(budget) + ' · no actuals yet</div>';
+    return meter(actual, budget, kind, true, compact);
+  }
   function pendingOf(b, a) { return b === null || a === null || a === undefined ? null : round2(b - a); }
   function dashCell() { return '<td class="num muted">—</td>'; }
 
@@ -790,7 +796,7 @@
         return '<tr class="click" data-go="' + href(a) + '"><td><b>' + esc(a.acct || '—') + '</b><div class="sub-line">' + esc(a.name) + (a.track === 'Yes' ? '' : ' · program') + '</div></td>' +
           (a.budget === null ? '<td class="num muted">not set</td>' : '<td class="num">' + money(a.budget) + (a.budgetSource !== 'Catalog' ? '<div class="sub-line">from Finance</div>' : '') + '</td>') +
           moneyCell(a.estimate || 0) + (a.actual === null ? dashCell() : moneyCell(a.actual)) + (p === null ? dashCell() : moneyCell(p)) +
-          '<td class="meter-col">' + meter(a.actual || 0, a.budget, info.key, a.budget !== null && a.actual !== null, true) + '</td></tr>';
+          '<td class="meter-col">' + budgetMeter(a.actual, a.budget, info.key, true) + '</td></tr>';
       }).join('') + '</tbody><tfoot><tr><td>Total</td>' + moneyCell(sum('budget')) + moneyCell(sum('estimate')) +
       (hasActual ? moneyCell(sum('actual')) + moneyCell(sum('budget') - sum('actual')) : dashCell() + dashCell()) + '<td></td></tr></tfoot></table></div>';
   }
@@ -818,7 +824,7 @@
       kpi('Estimate', money(a.estimate || 0), '#e0a800', 'trend', side === 'Revenue' ? 'Blanca\'s revenue sheet' : 'your estimates in the app') +
       kpi('Actual', a.actual === null ? '—' : money(a.actual), '#0d2f5e', 'ledger', a.actualSource === 'Sage' ? 'Sage, through ' + esc(d.actuals.through) : a.actualSource ? 'Finance YTD, ' + esc(periodLabel(d.finance.period)) : 'no actuals yet') +
       kpi(info.pending, p === null ? '—' : '<span class="' + (p < 0 ? 'neg' : '') + '">' + money(p) + '</span>', p !== null && p < 0 ? '#d83a3a' : '#2e9e5b', 'check') + '</div>' +
-      '<div class="card">' + meter(a.actual || 0, a.budget, info.key, a.budget !== null && a.actual !== null) + '<p class="muted small" style="margin:.4rem 0 0">' + budgetsAsOf(d, side) + '</p></div>';
+      '<div class="card">' + budgetMeter(a.actual, a.budget, info.key) + '<p class="muted small" style="margin:.4rem 0 0">' + budgetsAsOf(d, side) + '</p></div>';
   }
 
   function renderBudgets(args) {
@@ -935,9 +941,9 @@
             cell(o.rev, r[1]) + cell(o.exp, r[1]) + (n === null ? dashCell() : moneyCell(n)) + '</tr>';
         }).join('') + '</tbody></table></div>' +
         '<div class="card"><div class="meter-label"><span>Revenue · ' + esc(o.rev ? o.rev.acct : '—') + '</span></div>' +
-        meter(num(o.rev, 'actual'), num(o.rev, 'budget'), 'revenue', has(o.rev, 'budget') && has(o.rev, 'actual') && o.rev.budget > 0) +
+        (o.rev ? budgetMeter(o.rev.actual, o.rev.budget, 'revenue') : '<div class="meter-cap muted">No revenue account</div>') +
         '<div class="meter-label" style="margin-top:1rem"><span>Expenses · ' + esc(o.exp ? o.exp.acct : '—') + '</span></div>' +
-        meter(num(o.exp, 'actual'), num(o.exp, 'budget'), 'expense', has(o.exp, 'budget') && has(o.exp, 'actual')) + '</div>' +
+        (o.exp ? budgetMeter(o.exp.actual, o.exp.budget, 'expense') : '<div class="meter-cap muted">No expense account</div>') + '</div>' +
         (o.rev ? '<h2>Revenue sub-accounts · ' + esc(o.rev.acct) + '</h2>' + budgetSubsTable(o.rev, 'Revenue') : '') +
         (o.exp ? '<h2>Expense sub-accounts · ' + esc(o.exp.acct) + '</h2>' + budgetSubsTable(o.exp, 'Expense') : '') + '</div>';
       view.innerHTML = html; bindGo();
