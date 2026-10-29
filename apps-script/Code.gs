@@ -13,7 +13,7 @@
  */
 
 var TABS = { events: 'Events', catalog: 'Catalog', expenses: 'Expenses', revenue: 'Revenue', history: 'History', config: 'Config',
-  finance: 'Finance YTD' };
+  finance: 'Finance YTD', actuals: 'Actuals' };
 
 var COLS = {
   events: ['id', 'name', 'aliases', 'fy', 'expAcct', 'revAcct', 'date', 'attendees', 'track', 'revSheets', 'notes'],
@@ -23,10 +23,13 @@ var COLS = {
   revenue: ['fy', 'eventId', 'level', 'count', 'revenue', 'inkind', 'source'],
   history: ['eventId', 'fy', 'type', 'revenue', 'expenditures', 'profit', 'source'],
   // Filled each month from Beto's income statement by the "Beto financials check" scheduled task.
-  finance: ['period', 'fy', 'months', 'acct', 'eventId', 'label', 'budget', 'ytd', 'source']
+  finance: ['period', 'fy', 'months', 'acct', 'eventId', 'label', 'budget', 'ytd', 'source'],
+  // Transaction detail from Sage (event accounts only), one row per GL line. Sub-account comes
+  // from the "@1234567" code staff type in the description; Code Check says whether it was valid.
+  actuals: ['fy', 'date', 'acct', 'sub', 'check', 'eventId', 'jrnl', 'ref', 'description', 'amount', 'source']
 };
 
-var TEXT_FIELDS = { fy: 1, acct: 1, sub: 1, po: 1, expAcct: 1, revAcct: 1, period: 1 };
+var TEXT_FIELDS = { fy: 1, acct: 1, sub: 1, po: 1, expAcct: 1, revAcct: 1, period: 1, ref: 1 };
 
 // Dashboard buckets: Estimation, Quote and Pending Approval roll up into "estimated".
 var STATUS_BUCKET = { 'Estimation': 'estimated', 'Quote': 'estimated', 'Pending Approval': 'estimated',
@@ -395,9 +398,11 @@ function apiSummary_(fy, eventId) {
 
 /**
  * Every account on one side (Revenue or Expense) for a FY, events and programs alike, with
- * its sub-accounts. Budget comes from the Catalog (adjusted target when there is one); when a
- * FY has no sub-account budgets, the account total comes from Finance's statement.
- * Actual is Finance YTD at the account level. Per sub-account actuals need Sage (phase 2).
+ * its sub-accounts and four numbers each:
+ *   budget   Catalog (adjusted target when there is one); older FYs fall back to Finance's event total
+ *   estimate expenses: the app's estimates (not cancelled); revenue: Blanca's revenue sheets
+ *   actual   Sage transaction detail (Actuals tab) when loaded for that FY and side, per sub-account;
+ *            otherwise Finance YTD from Beto's statement, per account only
  */
 function apiBudgets_(fy, side) {
   fy = fy || currentFy_();
@@ -405,28 +410,71 @@ function apiBudgets_(fy, side) {
   var events = readTable_('events').filter(function (e) { return e.fy === fy; });
   var lines = readTable_('catalog').filter(function (l) { return l.fy === fy && l.side === side; });
   var finance = financeFor_(fy);
+  var isSide = function (acct) { return side === 'Expense' ? /^5/.test(acct) : !/^5/.test(acct); };
+  var actuals = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.actuals)
+    ? readTable_('actuals').filter(function (a) { return a.fy === fy && isSide(a.acct); }) : [];
+  var expenses = side === 'Expense' ? readTable_('expenses').filter(function (x) { return x.fy === fy && x.status !== 'Cancelled'; }) : [];
+  var revenue = side === 'Revenue' ? readTable_('revenue').filter(function (r) { return r.fy === fy; }) : [];
+  var through = actuals.reduce(function (m, a) { return a.date > m ? a.date : m; }, '');
   var out = [];
   events.forEach(function (ev) {
     var acct = side === 'Revenue' ? ev.revAcct : ev.expAcct;
     var own = lines.filter(function (l) { return l.eventId === ev.id; });
     if (!acct && !own.length) return;
+    acct = acct || own[0].acct;
     var subs = own.map(function (l) {
       var known = l.budget !== '' || l.adjusted !== '';
       return { sub: l.sub, label: l.label, cat: l.cat, budget: known ? lineTarget_(l) : null,
-        official: l.budget === '' ? null : num_(l.budget), adjusted: l.adjusted !== '', actual: null };
+        official: l.budget === '' ? null : num_(l.budget), adjusted: l.adjusted !== '', estimate: 0, actual: actuals.length ? 0 : null };
     }).sort(function (a, b) { return a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0; });
+    var bySub = {};
+    subs.forEach(function (x) { bySub[x.sub] = x; });
+    var extra = function (label) {
+      var x = { sub: '', label: label, cat: '', budget: null, official: null, adjusted: false, estimate: 0, actual: actuals.length ? 0 : null };
+      subs.push(x); return x;
+    };
+    // Estimate
+    var estimate = 0, loose = null;
+    if (side === 'Expense') {
+      expenses.filter(function (x) { return x.eventId === ev.id; }).forEach(function (x) {
+        var n = num_(x.amount); estimate += n;
+        var t = bySub[x.sub] || loose || (loose = extra('Not assigned to a sub-account'));
+        t.estimate += n;
+      });
+    } else {
+      revenue.filter(function (r) { return r.eventId === ev.id; }).forEach(function (r) {
+        var n = num_(r.revenue); estimate += n;
+        var c = revenueCategory_(r.level);
+        var t = subs.filter(function (x) { return x.cat === c; })[0] || subs.filter(function (x) { return /^other/i.test(x.cat); })[0] || loose || (loose = extra('Not matched to a sub-account'));
+        t.estimate += n;
+      });
+    }
+    // Actual
+    var actual = null, actualSource = null, uncoded = null;
+    var fin = finance ? financeEvent_(finance, ev.id) : null;
+    if (actuals.length) {
+      actual = 0; actualSource = 'Sage';
+      actuals.filter(function (a) { return a.acct === acct && (!a.eventId || a.eventId === ev.id); }).forEach(function (a) {
+        var n = num_(a.amount); actual += n;
+        var t = bySub[a.sub] || uncoded || (uncoded = extra('Not coded in Sage'));
+        t.actual += n;
+      });
+    } else if (finance) {
+      actual = fin && fin.found ? (side === 'Revenue' ? fin.revYtd : fin.expYtd) : 0; actualSource = 'Finance YTD';
+    }
+    subs.forEach(function (x) { x.estimate = round2_(x.estimate); if (x.actual !== null) x.actual = round2_(x.actual); });
     var known = subs.some(function (x) { return x.budget !== null; });
     var budget = round2_(subs.reduce(function (t, x) { return t + (x.budget || 0); }, 0));
-    var fin = finance ? financeEvent_(finance, ev.id) : null;
     var finBudget = fin ? (side === 'Revenue' ? fin.revBudget : fin.expBudget) : 0;
     var source = 'Catalog';
     if (!known && finBudget) { budget = finBudget; known = true; source = 'Finance income statement'; }
-    out.push({ eventId: ev.id, name: ev.name, track: ev.track || 'No', acct: acct || (own[0] && own[0].acct) || '',
+    out.push({ eventId: ev.id, name: ev.name, track: ev.track || 'No', acct: acct,
       budget: known ? budget : null, budgetSource: source, adjusted: subs.some(function (x) { return x.adjusted; }),
-      actual: fin && fin.found ? (side === 'Revenue' ? fin.revYtd : fin.expYtd) : (finance ? 0 : null), subs: subs });
+      estimate: round2_(estimate), actual: actual === null ? null : round2_(actual), actualSource: actualSource, subs: subs });
   });
   out.sort(function (a, b) { return a.acct < b.acct ? -1 : a.acct > b.acct ? 1 : a.name.localeCompare(b.name); });
-  return { fy: fy, side: side, finance: finance ? { period: finance.period, months: finance.months } : null, accounts: out };
+  return { fy: fy, side: side, finance: finance ? { period: finance.period, months: finance.months } : null,
+    actuals: actuals.length ? { source: 'Sage', through: through, rows: actuals.length } : null, accounts: out };
 }
 
 /**

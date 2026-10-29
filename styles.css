@@ -118,6 +118,7 @@ tbody tr { transition: background .12s; }
 tr.click { cursor: pointer; }
 tr.click:hover td { background: #f6f9ff; }
 tr.hl td { background: #eaf2ff; }
+tr.flag td { background: #fff6f1; }
 tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
 td .sub-line { color: var(--muted); font-size: .82rem; margin-top: .1rem; }
 .wrap-any { overflow-wrap: anywhere; }

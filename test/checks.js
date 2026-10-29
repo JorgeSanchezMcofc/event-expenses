@@ -81,6 +81,18 @@ check('Budgets lists every account on a side, events and programs, with sub-acco
   return `${e.accounts.length} expense / ${r.accounts.length} revenue accounts; Banquet ${money(b.budget)} in ${b.subs.length} subs; Whiskey 25-26 actual ${money(w.actual)}`;
 });
 
+check('Budgets: Sage detail drives Actual per sub-account, uncoded lines are kept apart', () => {
+  const e = me({ action: 'budgets', fy: '26-27', side: 'Expense' });
+  if (!e.actuals) return 'no Actuals tab in this fixture (skipped)';
+  const b = e.accounts.find(a => a.eventId === 'BANQUET');
+  assert.strictEqual(b.actualSource, 'Sage'); assert.strictEqual(b.actual, X.sageOct.banquetActual);
+  assert.strictEqual(b.subs.find(x => x.sub === X.sageOct.decorSub).actual, X.sageOct.decorActual);
+  assert.ok(Math.abs(b.subs.reduce((t, x) => t + (x.actual || 0), 0) - b.actual) < 0.01, 'subs add up to the account');
+  const total = e.accounts.reduce((t, a) => t + (a.actual || 0), 0);
+  assert.ok(Math.abs(total - e.accounts.reduce((t, a) => t + a.subs.reduce((u, x) => u + (x.actual || 0), 0), 0)) < 0.01);
+  return `${e.actuals.rows} Sage lines through ${e.actuals.through}; Banquet actual ${money(b.actual)}; estimate ${money(b.estimate)}`;
+});
+
 check('Every old Data row is in Expenses; Needs Review count', () => {
   const all = [...me({ action: 'expenses', fy: '25-26' }), ...me({ action: 'expenses', fy: '26-27' }), ...me({ action: 'expenses', fy: '' })];
   const byId = new Map(all.map(x => [x.id, x]));

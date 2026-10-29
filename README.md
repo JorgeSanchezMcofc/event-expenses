@@ -24,6 +24,7 @@ index.html / app.js                                    apps-script/Code.gs      
 | `#/lookup` | Pick an event and see its expense and revenue accounts, every sub-account with category, budget and remaining. Tap a category to get the exact sub-account in large type. |
 | `#/add` | Add or edit an estimate. The account and sub-account fill in from the Catalog, with a warning when the line would go over budget. Edit and Cancel are reached from any expense list. |
 | `#/dashboard` | All tracked events for the FY: budget, adjusted target, estimate split by Estimated/Quoted, Approved, Invoiced, Paid, and what Finance has booked so far (Finance YTD). Drill down event → sub-account → expenses. |
+| `#/budgets` | Revenues or expenses → events or programs → every account → its sub-accounts, with Budget, Estimate (the app for expenses, Blanca's sheets for revenue), Actual (Sage detail in the **Actuals** tab, else Finance YTD) and Pending. |
 | `#/report` | Replica of the old Report Master tab, with **Download PDF** and **Download CSV**. Shows the adjustment note when an adjusted target exists. |
 | `#/missing` | Approved without a PO, invoiced but not paid, Needs Review rows, lines over budget. The Actual column is a placeholder for phase 2. |
 | `#/history` | The last 3 to 5 fiscal years of revenue, expenditures and profit, as a table and a chart. |
@@ -40,6 +41,7 @@ Every call takes `token`. Reads also work as `GET ?action=…`, but the site use
 | `history` | `event` | History rows |
 | `revenue` | `fy`, `event` | Revenue rows (from Blanca's sheets) |
 | `reconcile` | `fy` | the lists on the "What's missing" screen |
+| `budgets` | `fy`, `side` = `Expense` / `Revenue` | every account on that side with sub-accounts: budget, estimate, actual, source |
 | `expense` | `op` = `create` / `update` / `cancel`, `expense` | the saved row and any over-budget warning |
 | `refreshRevenue` | `fy` (optional) | re-reads every `$ Revenue` tab listed in Events → Revenue Sheet ID |
 

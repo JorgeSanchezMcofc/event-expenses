@@ -789,9 +789,11 @@
       var crumbs = '<div class="crumbs"><button data-go="' + base + '">Budgets</button> › ' +
         (kind ? '<button data-go="' + base + '/' + sideKey + '">' + side + 's</button>' : '<span>' + side + 's</span>') +
         (kind ? ' › ' + (pick ? '<button data-go="' + base + '/' + sideKey + '/' + kind + '">' + (kind === 'events' ? 'Events' : 'Programs') + '</button>' : '<span>' + (kind === 'events' ? 'Events' : 'Programs') + '</span>') : '') +
-        (pick ? ' › <span>' + esc(pick) + '</span>' : '') + '</div>';
-      var asOf = d.finance ? 'Actual = Finance YTD as of ' + esc(periodLabel(d.finance.period)) + ' (' + d.finance.months + ' mo.). Live actuals arrive when Sage is connected.'
-        : 'No Finance statement yet for FY ' + esc(state.fy) + '. Actual fills in from Beto\'s monthly statement, and live once Sage is connected.';
+        (pick ? ' › <span>' + esc((d.accounts.filter(function (x) { return x.eventId === pick; })[0] || { name: pick }).name) + '</span>' : '') + '</div>';
+      var estFrom = side === 'Revenue' ? 'Blanca\'s revenue sheets' : 'your estimates in the app (not cancelled)';
+      var asOf = 'Estimate = ' + estFrom + '. ' + (d.actuals ? 'Actual = Sage detail through ' + esc(d.actuals.through) + ' (' + d.actuals.rows + ' lines).'
+        : d.finance ? 'Actual = Finance YTD as of ' + esc(periodLabel(d.finance.period)) + ' (' + d.finance.months + ' mo.); per sub-account actuals need the Sage detail.'
+        : 'No actuals yet for FY ' + esc(state.fy) + '. They fill in from Sage detail or Beto\'s monthly statement.');
       var pending = function (b, a) { return b === null || a === null ? null : round2(b - a); };
       var html = '<div class="stack">' + crumbs;
       if (!kind) {
@@ -807,16 +809,17 @@
         var sum = function (k) { return list.reduce(function (t, a) { return t + (a[k] || 0); }, 0); };
         html += '<h1>' + (kind === 'events' ? 'Event' : 'Program') + ' ' + side.toLowerCase() + ' accounts <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
           '<p class="muted small" style="margin:0">' + asOf + '</p>';
-        html += list.length ? '<div class="table-wrap cards"><table><thead><tr><th>Account</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th><th class="meter-col">Progress</th></tr></thead><tbody>' +
+        html += list.length ? '<div class="table-wrap cards"><table><thead><tr><th>Account</th><th class="num">Budget</th><th class="num">Estimate</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th><th class="meter-col">Progress</th></tr></thead><tbody>' +
           list.map(function (a) {
             var p = pending(a.budget, a.actual);
             return '<tr class="click" data-go="' + base + '/' + sideKey + '/' + kind + '/' + encodeURIComponent(a.eventId) + '"><td><b>' + esc(a.acct || '—') + '</b><div class="sub-line">' + esc(a.name) + '</div></td>' +
               (a.budget === null ? '<td class="num muted">not set</td>' : '<td class="num">' + money(a.budget) + (a.budgetSource !== 'Catalog' ? '<div class="sub-line">from Finance</div>' : '') + '</td>') +
+              moneyCell(a.estimate || 0) +
               (a.actual === null ? '<td class="num muted">—</td>' : moneyCell(a.actual)) +
               (p === null ? '<td class="num muted">—</td>' : moneyCell(p)) +
               '<td class="meter-col">' + meter(a.actual || 0, a.budget, sideKey, a.budget !== null && a.actual !== null, true) + '</td></tr>';
-          }).join('') + '</tbody><tfoot><tr><td>Total</td>' + moneyCell(sum('budget')) + (d.finance ? moneyCell(sum('actual')) : '<td class="num">—</td>') +
-          (d.finance ? moneyCell(sum('budget') - sum('actual')) : '<td class="num">—</td>') + '<td></td></tr></tfoot></table></div>' : '<div class="empty">No ' + kind + ' with ' + side.toLowerCase() + ' accounts in FY ' + esc(state.fy) + '.</div>';
+          }).join('') + '</tbody><tfoot><tr><td>Total</td>' + moneyCell(sum('budget')) + moneyCell(sum('estimate')) + (d.actuals || d.finance ? moneyCell(sum('actual')) : '<td class="num">—</td>') +
+          (d.actuals || d.finance ? moneyCell(sum('budget') - sum('actual')) : '<td class="num">—</td>') + '<td></td></tr></tfoot></table></div>' : '<div class="empty">No ' + kind + ' with ' + side.toLowerCase() + ' accounts in FY ' + esc(state.fy) + '.</div>';
         html += '</div>'; view.innerHTML = html; bindGo(); return;
       }
       var a = list.filter(function (x) { return x.eventId === pick; })[0] || d.accounts.filter(function (x) { return x.eventId === pick; })[0];
@@ -825,18 +828,21 @@
       html += '<h1>' + esc(a.name) + '</h1>' +
         '<div class="kpis">' + kpi(side + ' account', esc(a.acct || '—'), side === 'Revenue' ? '#F04C57' : '#185097', 'hash') +
         kpi('Budget', a.budget === null ? 'not set' : money(a.budget), '#5e35b1', 'wallet', a.budgetSource !== 'Catalog' ? 'from the Finance statement' : (a.adjusted ? 'with adjustments' : '')) +
-        kpi('Actual', a.actual === null ? '—' : money(a.actual), '#0d2f5e', 'ledger', d.finance ? 'Finance YTD, ' + esc(periodLabel(d.finance.period)) : 'no statement yet') +
+        kpi('Estimate', money(a.estimate || 0), '#e0a800', 'trend', side === 'Revenue' ? 'Blanca\'s revenue sheet' : 'your estimates in the app') +
+        kpi('Actual', a.actual === null ? '—' : money(a.actual), '#0d2f5e', 'ledger', a.actualSource === 'Sage' ? 'Sage, through ' + esc(d.actuals.through) : a.actualSource ? 'Finance YTD, ' + esc(periodLabel(d.finance.period)) : 'no actuals yet') +
         kpi(pendingLabel, p === null ? '—' : '<span class="' + (p < 0 ? 'neg' : '') + '">' + money(p) + '</span>', p !== null && p < 0 ? '#d83a3a' : '#2e9e5b', 'check') + '</div>' +
         '<div class="card">' + meter(a.actual || 0, a.budget, sideKey, a.budget !== null && a.actual !== null) + '<p class="muted small" style="margin:.4rem 0 0">' + asOf + '</p></div>' +
         '<h2>Sub-accounts</h2>' +
-        (a.subs.length ? '<div class="table-wrap cards"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th></tr></thead><tbody>' +
+        (a.subs.length ? '<div class="table-wrap cards"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Estimate</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th></tr></thead><tbody>' +
           a.subs.map(function (x) {
             var px = pending(x.budget, x.actual);
-            return '<tr><td><b>' + esc(x.sub) + '</b><div class="sub-line">' + esc(x.label) + '</div></td><td>' + (side === 'Expense' ? catTag(x.cat) : esc(x.cat)) + '</td>' +
-              (x.budget === null ? '<td class="num muted">not set</td>' : '<td class="num">' + money(x.budget) + (x.adjusted ? '<div class="sub-line">Finance ' + money(x.official) + '</div>' : '') + '</td>') +
+            return '<tr' + (x.sub ? '' : ' class="flag"') + '><td><b>' + esc(x.sub || '—') + '</b><div class="sub-line">' + esc(x.label) + '</div></td><td>' + (side === 'Expense' ? catTag(x.cat) : esc(x.cat)) + '</td>' +
+              (x.budget === null ? '<td class="num muted">' + (x.sub ? 'not set' : '—') + '</td>' : '<td class="num">' + money(x.budget) + (x.adjusted ? '<div class="sub-line">Finance ' + money(x.official) + '</div>' : '') + '</td>') +
+              moneyCell(x.estimate || 0) +
               (x.actual === null ? '<td class="num muted" title="Per sub-account actuals need Sage">needs Sage</td>' : moneyCell(x.actual)) +
               (px === null ? '<td class="num muted">—</td>' : moneyCell(px)) + '</tr>';
-          }).join('') + '</tbody></table></div><p class="muted small" style="margin:0">Finance reports actuals per account, not per sub-account. The sub-account Actual column fills in once Sage is connected and every expense carries its @sub-account code.</p>'
+          }).join('') + '</tbody></table></div>' + (a.actualSource === 'Sage' ? '<p class="muted small" style="margin:0">Actual per sub-account comes from the @code in each Sage description. "Not coded in Sage" holds lines with a missing or invalid code; see the Actuals tab.</p>'
+            : '<p class="muted small" style="margin:0">Per sub-account actuals fill in once the Sage detail for this FY is loaded (Actuals tab).</p>')
           : '<div class="empty">No sub-accounts in the Catalog for this account.</div>') +
         '<div class="btn-row"><a class="btn secondary" href="#/dashboard/' + encodeURIComponent(a.eventId) + '">Open in dashboard</a><a class="btn secondary" href="#/report/' + encodeURIComponent(a.eventId) + '">Event report</a></div></div>';
       view.innerHTML = html; bindGo();
