@@ -14,7 +14,7 @@ index.html / app.js                                    apps-script/Code.gs      
 ```
 
 - The page signs in with Google Identity Services and sends the ID token with every request (`POST`, `text/plain` body, so no CORS preflight).
-- `Code.gs` validates the token with Google (`tokeninfo`), checks that the audience is this app's OAuth client ID, and answers only `ALLOWED_EMAIL`. Any other account gets `{ ok: false, error: "Access denied…" }` and no data.
+- `Code.gs` validates the token with Google (`tokeninfo`), checks that the audience is this app's OAuth client ID, and answers only the address(es) in `ALLOWED_EMAIL`. Any other account gets `{ ok: false, error: "Access denied…" }` and no data.
 - The client ID and allowed email are **script properties**, not code. The client ID in `config.js` is public by design.
 
 ## Screens
@@ -60,7 +60,7 @@ How a sub-account is filled in (the same rule the migration used): the line mapp
 2. Replace `Code.gs` with `apps-script/Code.gs` from this repo. Under **Project Settings**, tick *Show "appsscript.json"* and replace it with `apps-script/appsscript.json`.
 3. **Project Settings → Script properties**, add:
    - `CLIENT_ID` = the OAuth client ID from step 1
-   - `ALLOWED_EMAIL` = `jsanchez@mcallenchamber.com`
+   - `ALLOWED_EMAIL` = `jsanchez@mcallenchamber.com` (to let more people in, separate addresses with commas: `jsanchez@mcallenchamber.com, agarza@mcallenchamber.com`)
 4. **Deploy → New deployment → Web app**: *Execute as* **Me**, *Who has access* **Anyone**. Authorize when asked. "Anyone" only means the URL is reachable; every request still needs your signed-in Google account.
 5. Copy the web app URL (ends in `/exec`) into `config.js` → `apiUrl`, along with the client ID, then commit and push.
 

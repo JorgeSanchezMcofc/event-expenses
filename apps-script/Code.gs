@@ -3,7 +3,7 @@
  *
  * Every request must carry a Google ID token (from Google Sign-In on the front end).
  * The token is checked against Google's tokeninfo endpoint; only the address in the
- * ALLOWED_EMAIL script property gets data. Nothing secret lives in this file: the
+ * ALLOWED_EMAIL script property (one address, or several separated by commas) gets data. Nothing secret lives in this file: the
  * OAuth client ID and the allowed email are script properties (see README).
  *
  * Reads:  catalog, expenses, summary, history, revenue, reconcile (summary includes Finance YTD), budgets
@@ -84,8 +84,9 @@ function verifyToken_(token) {
   if (!token) throw new Error('Not signed in');
   var props = PropertiesService.getScriptProperties();
   var clientId = props.getProperty('CLIENT_ID');
-  var allowed = String(props.getProperty('ALLOWED_EMAIL') || '').toLowerCase();
-  if (!clientId || !allowed) throw new Error('Server is not configured (CLIENT_ID / ALLOWED_EMAIL)');
+  var allowed = String(props.getProperty('ALLOWED_EMAIL') || '').toLowerCase().split(',')
+    .map(function (e) { return e.trim(); }).filter(function (e) { return e; });
+  if (!clientId || !allowed.length) throw new Error('Server is not configured (CLIENT_ID / ALLOWED_EMAIL)');
 
   var cache = CacheService.getScriptCache();
   var key = 'tok_' + Utilities.base64EncodeWebSafe(
@@ -102,7 +103,7 @@ function verifyToken_(token) {
   if (info.aud !== clientId || !okIssuer) throw new Error('Token was not issued for this app');
   if (String(info.email_verified) !== 'true') throw new Error('Email not verified');
   if (Number(info.exp) * 1000 < Date.now()) throw new Error('Sign-in expired');
-  if (email !== allowed) throw new Error('Access denied for ' + email);
+  if (allowed.indexOf(email) < 0) throw new Error('Access denied for ' + email);
 
   var user = { email: email };
   var ttl = Math.max(0, Math.min(300, Math.floor(Number(info.exp) - Date.now() / 1000)));

@@ -171,6 +171,15 @@ check('Any other account gets no data', () => {
   return tries.map(t => t.error).join(' | ');
 });
 
+check('ALLOWED_EMAIL accepts a comma-separated list', () => {
+  process.env.ALLOWED_EMAIL = 'someone.else@example.com, JSanchez@McAllenChamber.com';
+  const g2 = loadGas({ fixture, tokens: TEST_TOKENS });
+  const both = ['tok-jorge', 'tok-other'].map(t => g2.call({ token: t, action: 'whoami' }));
+  delete process.env.ALLOWED_EMAIL;
+  assert.ok(both.every(r => r.ok), JSON.stringify(both));
+  return both.map(r => r.data.email).join(' + ') + ' both allowed';
+});
+
 check('No salary or personnel data in any tab the API reads', () => {
   const pat = /salar|payroll|compensation|benefit|pension|social security|medicare/i;
   const hits = [];
