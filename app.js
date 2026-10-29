@@ -223,7 +223,7 @@
       if (t.dataset.labeled) return;
       t.dataset.labeled = '1';
       var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (th) { return th.textContent.trim(); });
-      t.querySelectorAll('tbody tr').forEach(function (tr) {
+      t.querySelectorAll('tbody tr, tfoot tr').forEach(function (tr) {
         var lead = tr.querySelector('td.lead');
         Array.prototype.forEach.call(tr.children, function (td, i) {
           if (!td.hasAttribute('data-label')) td.setAttribute('data-label', heads[i] || '');
@@ -252,7 +252,7 @@
     var parts = (location.hash.replace(/^#\/?/, '') || 'lookup').split('/');
     var name = parts[0];
     document.querySelectorAll('#tabs a').forEach(function (a) { a.classList.toggle('active', a.dataset.route === name); });
-    var screens = { lookup: renderLookup, add: renderAdd, dashboard: renderDashboard, report: renderReport, missing: renderMissing, history: renderHistory };
+    var screens = { lookup: renderLookup, add: renderAdd, dashboard: renderDashboard, budgets: renderBudgets, report: renderReport, missing: renderMissing, history: renderHistory };
     (screens[name] || renderLookup)(parts.slice(1));
     window.scrollTo(0, 0);
   }
@@ -761,6 +761,90 @@
         location.hash = '#/add/edit/' + encodeURIComponent(b.dataset.edit);
       });
     });
+  }
+
+  /* ------------------------------------------------------------ Budgets: side → events/programs → account → sub-accounts */
+
+  function renderBudgets(args) {
+    var nav = state.nav; // async callbacks below stop if the user navigates away
+    var side = args[0] === 'revenue' ? 'Revenue' : args[0] === 'expense' ? 'Expense' : '';
+    var kind = args[1] === 'events' || args[1] === 'programs' ? args[1] : '';
+    var pick = args[2] ? decodeURIComponent(args[2]) : '';
+    var base = '#/budgets';
+    var choice = function (href, title, sub, color, ico) {
+      return '<a class="choice" href="' + href + '" style="--kc:' + color + '"><span class="chip">' + icon(ico) + '</span><b>' + title + '</b><span class="muted">' + sub + '</span></a>';
+    };
+    if (!side) {
+      view.innerHTML = '<div class="stack"><h1>Budgets <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
+        '<p class="muted" style="margin:0">What do you want to see?</p><div class="choices">' +
+        choice(base + '/revenue', 'Revenues', 'Every revenue account and what has come in', '#F04C57', 'trend') +
+        choice(base + '/expense', 'Expenses', 'Every expense account and what is left to spend', '#185097', 'wallet') + '</div></div>';
+      return;
+    }
+    var sideKey = side === 'Revenue' ? 'revenue' : 'expense';
+    var pendingLabel = side === 'Revenue' ? 'Pending to collect' : 'Pending to spend';
+    loading();
+    api('budgets', { fy: state.fy, side: side }).then(function (d) { if (nav !== state.nav) return;
+      var isEvent = function (a) { return a.track === 'Yes'; };
+      var crumbs = '<div class="crumbs"><button data-go="' + base + '">Budgets</button> › ' +
+        (kind ? '<button data-go="' + base + '/' + sideKey + '">' + side + 's</button>' : '<span>' + side + 's</span>') +
+        (kind ? ' › ' + (pick ? '<button data-go="' + base + '/' + sideKey + '/' + kind + '">' + (kind === 'events' ? 'Events' : 'Programs') + '</button>' : '<span>' + (kind === 'events' ? 'Events' : 'Programs') + '</span>') : '') +
+        (pick ? ' › <span>' + esc(pick) + '</span>' : '') + '</div>';
+      var asOf = d.finance ? 'Actual = Finance YTD as of ' + esc(periodLabel(d.finance.period)) + ' (' + d.finance.months + ' mo.). Live actuals arrive when Sage is connected.'
+        : 'No Finance statement yet for FY ' + esc(state.fy) + '. Actual fills in from Beto\'s monthly statement, and live once Sage is connected.';
+      var pending = function (b, a) { return b === null || a === null ? null : round2(b - a); };
+      var html = '<div class="stack">' + crumbs;
+      if (!kind) {
+        var ev = d.accounts.filter(isEvent), pr = d.accounts.filter(function (a) { return !isEvent(a); });
+        var tot = function (list) { return list.reduce(function (t, a) { return t + (a.budget || 0); }, 0); };
+        html += '<h1>' + side + 's <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1><p class="muted" style="margin:0">Events or programs?</p><div class="choices">' +
+          choice(base + '/' + sideKey + '/events', 'Events', ev.length + ' accounts · budget ' + money(tot(ev)), side === 'Revenue' ? '#F04C57' : '#185097', 'target') +
+          choice(base + '/' + sideKey + '/programs', 'Programs', pr.length + ' accounts · budget ' + money(tot(pr)), '#5e35b1', 'ledger') + '</div></div>';
+        view.innerHTML = html; bindGo(); return;
+      }
+      var list = d.accounts.filter(function (a) { return kind === 'events' ? isEvent(a) : !isEvent(a); });
+      if (!pick) {
+        var sum = function (k) { return list.reduce(function (t, a) { return t + (a[k] || 0); }, 0); };
+        html += '<h1>' + (kind === 'events' ? 'Event' : 'Program') + ' ' + side.toLowerCase() + ' accounts <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
+          '<p class="muted small" style="margin:0">' + asOf + '</p>';
+        html += list.length ? '<div class="table-wrap cards"><table><thead><tr><th>Account</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th><th class="meter-col">Progress</th></tr></thead><tbody>' +
+          list.map(function (a) {
+            var p = pending(a.budget, a.actual);
+            return '<tr class="click" data-go="' + base + '/' + sideKey + '/' + kind + '/' + encodeURIComponent(a.eventId) + '"><td><b>' + esc(a.acct || '—') + '</b><div class="sub-line">' + esc(a.name) + '</div></td>' +
+              (a.budget === null ? '<td class="num muted">not set</td>' : '<td class="num">' + money(a.budget) + (a.budgetSource !== 'Catalog' ? '<div class="sub-line">from Finance</div>' : '') + '</td>') +
+              (a.actual === null ? '<td class="num muted">—</td>' : moneyCell(a.actual)) +
+              (p === null ? '<td class="num muted">—</td>' : moneyCell(p)) +
+              '<td class="meter-col">' + meter(a.actual || 0, a.budget, sideKey, a.budget !== null && a.actual !== null, true) + '</td></tr>';
+          }).join('') + '</tbody><tfoot><tr><td>Total</td>' + moneyCell(sum('budget')) + (d.finance ? moneyCell(sum('actual')) : '<td class="num">—</td>') +
+          (d.finance ? moneyCell(sum('budget') - sum('actual')) : '<td class="num">—</td>') + '<td></td></tr></tfoot></table></div>' : '<div class="empty">No ' + kind + ' with ' + side.toLowerCase() + ' accounts in FY ' + esc(state.fy) + '.</div>';
+        html += '</div>'; view.innerHTML = html; bindGo(); return;
+      }
+      var a = list.filter(function (x) { return x.eventId === pick; })[0] || d.accounts.filter(function (x) { return x.eventId === pick; })[0];
+      if (!a) { html += '<div class="empty">No ' + side.toLowerCase() + ' account for ' + esc(pick) + ' in FY ' + esc(state.fy) + '.</div></div>'; view.innerHTML = html; bindGo(); return; }
+      var p = pending(a.budget, a.actual);
+      html += '<h1>' + esc(a.name) + '</h1>' +
+        '<div class="kpis">' + kpi(side + ' account', esc(a.acct || '—'), side === 'Revenue' ? '#F04C57' : '#185097', 'hash') +
+        kpi('Budget', a.budget === null ? 'not set' : money(a.budget), '#5e35b1', 'wallet', a.budgetSource !== 'Catalog' ? 'from the Finance statement' : (a.adjusted ? 'with adjustments' : '')) +
+        kpi('Actual', a.actual === null ? '—' : money(a.actual), '#0d2f5e', 'ledger', d.finance ? 'Finance YTD, ' + esc(periodLabel(d.finance.period)) : 'no statement yet') +
+        kpi(pendingLabel, p === null ? '—' : '<span class="' + (p < 0 ? 'neg' : '') + '">' + money(p) + '</span>', p !== null && p < 0 ? '#d83a3a' : '#2e9e5b', 'check') + '</div>' +
+        '<div class="card">' + meter(a.actual || 0, a.budget, sideKey, a.budget !== null && a.actual !== null) + '<p class="muted small" style="margin:.4rem 0 0">' + asOf + '</p></div>' +
+        '<h2>Sub-accounts</h2>' +
+        (a.subs.length ? '<div class="table-wrap cards"><table><thead><tr><th>Sub-account</th><th>Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">' + pendingLabel + '</th></tr></thead><tbody>' +
+          a.subs.map(function (x) {
+            var px = pending(x.budget, x.actual);
+            return '<tr><td><b>' + esc(x.sub) + '</b><div class="sub-line">' + esc(x.label) + '</div></td><td>' + (side === 'Expense' ? catTag(x.cat) : esc(x.cat)) + '</td>' +
+              (x.budget === null ? '<td class="num muted">not set</td>' : '<td class="num">' + money(x.budget) + (x.adjusted ? '<div class="sub-line">Finance ' + money(x.official) + '</div>' : '') + '</td>') +
+              (x.actual === null ? '<td class="num muted" title="Per sub-account actuals need Sage">needs Sage</td>' : moneyCell(x.actual)) +
+              (px === null ? '<td class="num muted">—</td>' : moneyCell(px)) + '</tr>';
+          }).join('') + '</tbody></table></div><p class="muted small" style="margin:0">Finance reports actuals per account, not per sub-account. The sub-account Actual column fills in once Sage is connected and every expense carries its @sub-account code.</p>'
+          : '<div class="empty">No sub-accounts in the Catalog for this account.</div>') +
+        '<div class="btn-row"><a class="btn secondary" href="#/dashboard/' + encodeURIComponent(a.eventId) + '">Open in dashboard</a><a class="btn secondary" href="#/report/' + encodeURIComponent(a.eventId) + '">Event report</a></div></div>';
+      view.innerHTML = html; bindGo();
+    }).catch(showError);
+  }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function bindGo() {
+    view.querySelectorAll('[data-go]').forEach(function (el) { el.addEventListener('click', function () { location.hash = el.dataset.go; }); });
   }
 
   /* ------------------------------------------------------------ 4. Event report */

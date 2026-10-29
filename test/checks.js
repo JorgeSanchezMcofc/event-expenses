@@ -68,6 +68,19 @@ check('FY without sub-account budgets uses the event total from Finance', () => 
   return `Banquet 25-26 budget ${money(b.expense.budget)} from Finance; Whiskey keeps its Catalog budget`;
 });
 
+check('Budgets lists every account on a side, events and programs, with sub-accounts', () => {
+  const e = me({ action: 'budgets', fy: '26-27', side: 'Expense' });
+  const b = e.accounts.find(a => a.eventId === 'BANQUET');
+  assert.strictEqual(b.acct, X.banquet.acct); assert.strictEqual(b.budget, X.banquet.expAdjusted);
+  assert.ok(b.subs.some(x => x.sub === X.banquet.fbSub && x.budget === X.banquet.fbAdjusted));
+  assert.ok(e.accounts.some(a => a.track !== 'Yes'), 'has programs');
+  const r = me({ action: 'budgets', fy: '26-27', side: 'Revenue' });
+  assert.ok(r.accounts.length && r.accounts.every(a => !a.acct || !/^5/.test(a.acct)));
+  const w = me({ action: 'budgets', fy: '25-26', side: 'Expense' }).accounts.find(a => a.eventId === 'WHISKEY');
+  assert.strictEqual(w.actual, X.whiskey.actual2526);
+  return `${e.accounts.length} expense / ${r.accounts.length} revenue accounts; Banquet ${money(b.budget)} in ${b.subs.length} subs; Whiskey 25-26 actual ${money(w.actual)}`;
+});
+
 check('Every old Data row is in Expenses; Needs Review count', () => {
   const all = [...me({ action: 'expenses', fy: '25-26' }), ...me({ action: 'expenses', fy: '26-27' }), ...me({ action: 'expenses', fy: '' })];
   const byId = new Map(all.map(x => [x.id, x]));

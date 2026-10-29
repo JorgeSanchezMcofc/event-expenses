@@ -6,7 +6,7 @@
  * ALLOWED_EMAIL script property gets data. Nothing secret lives in this file: the
  * OAuth client ID and the allowed email are script properties (see README).
  *
- * Reads:  catalog, expenses, summary, history, revenue, reconcile (summary includes Finance YTD)
+ * Reads:  catalog, expenses, summary, history, revenue, reconcile (summary includes Finance YTD), budgets
  * Writes: expense (create / update / cancel), refreshRevenue
  * GET  ?action=summary&fy=26-27&event=BANQUET&token=...
  * POST {"action":"summary","fy":"26-27","event":"BANQUET","token":"..."} as text/plain
@@ -59,6 +59,7 @@ function respond_(action, p) {
       case 'history': data = apiHistory_(p.event); break;
       case 'revenue': data = apiRevenue_(p.fy, p.event); break;
       case 'reconcile': data = apiReconcile_(p.fy); break;
+      case 'budgets': data = apiBudgets_(p.fy, p.side); break;
       case 'expense': data = apiSaveExpense_(p.op || 'create', p.expense || {}); break;
       case 'refreshRevenue': data = apiRefreshRevenue_(p.fy); break;
       case 'whoami': data = { email: user.email }; break;
@@ -390,6 +391,42 @@ function apiSummary_(fy, eventId) {
   });
   if (!eventId) out = out.filter(function (s) { return s.expense.budget || s.expense.est.total || s.revenue.budget || s.revenue.estimate; });
   return { fy: fy, events: out, finance: finance ? { period: finance.period, months: finance.months } : null };
+}
+
+/**
+ * Every account on one side (Revenue or Expense) for a FY, events and programs alike, with
+ * its sub-accounts. Budget comes from the Catalog (adjusted target when there is one); when a
+ * FY has no sub-account budgets, the account total comes from Finance's statement.
+ * Actual is Finance YTD at the account level. Per sub-account actuals need Sage (phase 2).
+ */
+function apiBudgets_(fy, side) {
+  fy = fy || currentFy_();
+  side = side === 'Revenue' ? 'Revenue' : 'Expense';
+  var events = readTable_('events').filter(function (e) { return e.fy === fy; });
+  var lines = readTable_('catalog').filter(function (l) { return l.fy === fy && l.side === side; });
+  var finance = financeFor_(fy);
+  var out = [];
+  events.forEach(function (ev) {
+    var acct = side === 'Revenue' ? ev.revAcct : ev.expAcct;
+    var own = lines.filter(function (l) { return l.eventId === ev.id; });
+    if (!acct && !own.length) return;
+    var subs = own.map(function (l) {
+      var known = l.budget !== '' || l.adjusted !== '';
+      return { sub: l.sub, label: l.label, cat: l.cat, budget: known ? lineTarget_(l) : null,
+        official: l.budget === '' ? null : num_(l.budget), adjusted: l.adjusted !== '', actual: null };
+    }).sort(function (a, b) { return a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0; });
+    var known = subs.some(function (x) { return x.budget !== null; });
+    var budget = round2_(subs.reduce(function (t, x) { return t + (x.budget || 0); }, 0));
+    var fin = finance ? financeEvent_(finance, ev.id) : null;
+    var finBudget = fin ? (side === 'Revenue' ? fin.revBudget : fin.expBudget) : 0;
+    var source = 'Catalog';
+    if (!known && finBudget) { budget = finBudget; known = true; source = 'Finance income statement'; }
+    out.push({ eventId: ev.id, name: ev.name, track: ev.track || 'No', acct: acct || (own[0] && own[0].acct) || '',
+      budget: known ? budget : null, budgetSource: source, adjusted: subs.some(function (x) { return x.adjusted; }),
+      actual: fin && fin.found ? (side === 'Revenue' ? fin.revYtd : fin.expYtd) : (finance ? 0 : null), subs: subs });
+  });
+  out.sort(function (a, b) { return a.acct < b.acct ? -1 : a.acct > b.acct ? 1 : a.name.localeCompare(b.name); });
+  return { fy: fy, side: side, finance: finance ? { period: finance.period, months: finance.months } : null, accounts: out };
 }
 
 /**

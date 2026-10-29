@@ -121,6 +121,22 @@ function startServer(port, token) {
         await page.screenshot({ path: `${OUT}/${vp.name}-3b-drill.png`, fullPage: true });
       }
 
+      // Budgets: side → events → account → sub-accounts
+      await page.goto(base + '#/budgets');
+      await page.click('a.choice[href="#/budgets/expense"]');
+      await page.waitForSelector('a.choice[href="#/budgets/expense/events"]');
+      await page.click('a.choice[href="#/budgets/expense/events"]');
+      await page.waitForSelector('tr[data-go$="/BANQUET"]');
+      ok(`[${vp.name}] Budgets list has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
+      await page.screenshot({ path: `${OUT}/${vp.name}-7-budgets.png`, fullPage: true });
+      await page.click('tr[data-go$="/BANQUET"]');
+      await page.waitForSelector('text=Sub-accounts');
+      const bud = await page.textContent('main');
+      ok(`[${vp.name}] Budgets account shows Budget / Actual / Pending and sub-accounts`,
+        bud.includes(usd(B.expAdjusted)) && /Pending to spend/.test(bud) && bud.includes(B.fbSub), bud.replace(/\s+/g, ' ').slice(0, 160));
+      ok(`[${vp.name}] Budgets account has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
+      await page.screenshot({ path: `${OUT}/${vp.name}-7b-budget-account.png`, fullPage: true });
+
       await page.goto(base + '#/report/WHISKEY');
       await page.waitForSelector('#report .rt.expense');
       await page.waitForTimeout(300);

@@ -246,6 +246,15 @@ tr.cancelled td.amt { text-decoration: line-through; }
 .drill-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 1rem; align-items: stretch; }
 .drill-top > * { min-width: 0; }
 
+/* budgets: big either/or choices */
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: .9rem; }
+.choice { position: relative; display: flex; flex-direction: column; gap: .35rem; padding: 1.3rem 1.3rem 1.2rem; border-radius: var(--radius); background: #fff;
+  border: 1px solid var(--line); box-shadow: var(--shadow); text-decoration: none; color: var(--ink); overflow: hidden; transition: transform .15s, box-shadow .15s; }
+.choice::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--kc); }
+.choice:hover { transform: translateY(-2px); box-shadow: var(--shadow-hi); }
+.choice .chip { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, #fff); margin-bottom: .3rem; }
+.choice b { font-size: 1.35rem; }
+
 /* report: matches the old Report Master tab */
 .report { background: #fff; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .report .table-wrap { box-shadow: none; }
@@ -281,9 +290,11 @@ tr.cancelled td.amt { text-decoration: line-through; }
   .donut { max-width: 200px; }
   /* Wide tables become one card per row, so nothing scrolls sideways. */
   .table-wrap.cards { border: 0; background: none; box-shadow: none; overflow: visible; }
-  .cards table, .cards tbody, .cards tr, .cards td { display: block; width: 100%; }
+  .cards table, .cards tbody, .cards tfoot, .cards tr, .cards td { display: block; width: 100%; }
   .cards thead { display: none; }
-  .cards tbody tr { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: .55rem .85rem; margin-bottom: .6rem; }
+  .cards tfoot tr { background: var(--soft); }
+  .cards tfoot td:empty { display: none; }
+  .cards tbody tr, .cards tfoot tr { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: .55rem .85rem; margin-bottom: .6rem; }
   .cards td { display: block; padding: .3rem 0; border: 0; text-align: right; min-width: 0; }
   .cards td::after { content: ''; display: table; clear: both; }
   .cards td::before { content: attr(data-label); float: left; max-width: 45%; margin-right: 1rem; padding-top: .1rem; text-align: left; color: var(--muted); font-size: .74rem; font-weight: 500;
@@ -324,7 +335,7 @@ tr.cancelled td.amt { text-decoration: line-through; }
   .report:not(.pdf) .rt tbody td { font-weight: 500; }
   .brand img { display: none; }
   .tabs { top: 52px; gap: .15rem; padding: .35rem 8px; overflow: visible; }
-  .tabs a { flex: 1 1 0; min-width: 0; flex-direction: column; gap: .15rem; padding: .4rem .1rem; border-radius: 10px; font-size: .68rem; }
+  .tabs a { flex: 1 1 0; min-width: 0; flex-direction: column; gap: .15rem; padding: .4rem 0; border-radius: 10px; font-size: .62rem; }
   .tabs .ico { width: 19px; height: 19px; }
   .tabs .full { display: none; }
   .tabs .short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
