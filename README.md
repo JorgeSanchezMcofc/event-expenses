@@ -71,7 +71,16 @@ How a sub-account is filled in (the same rule the migration used): the line mapp
 
 ## Redeploying the Apps Script
 
-After changing `Code.gs`, paste the new version into the Apps Script editor, then **Deploy → Manage deployments → (pencil) Edit → Version: New version → Deploy**. Editing the existing deployment keeps the same `/exec` URL, so `config.js` does not change. "New deployment" would create a new URL.
+Pushing a change under `apps-script/` to `main` publishes it by itself: the **Deploy Apps Script** GitHub Action (`.github/workflows/deploy-apps-script.yml`) pushes `Code.gs` and `appsscript.json` to the project in `.clasp.json` and moves the existing web app deployment to the new version, so the `/exec` URL in `config.js` never changes. It can also be run by hand from the Actions tab.
+
+One-time setup:
+1. Turn on **Google Apps Script API** at <https://script.google.com/home/usersettings>.
+2. On a computer with Node.js: `npm install -g @google/clasp@2.4.2`, then `clasp login` and allow access with the Google account that owns the Sheet.
+3. Copy the contents of `~/.clasprc.json` into a repository secret named `CLASPRC_JSON` (GitHub → Settings → Secrets and variables → Actions → New repository secret). Delete the local file afterwards if you like; access can be revoked any time at <https://myaccount.google.com/permissions>.
+
+The Action stops without changing anything if the live project has files other than `Code` and `appsscript`, because a push replaces every file.
+
+By hand instead: paste the new `Code.gs` into the Apps Script editor, then **Deploy → Manage deployments → (pencil) Edit → Version: New version → Deploy**. Editing the existing deployment keeps the same `/exec` URL. "New deployment" would create a new URL.
 
 ## Adding a new fiscal year budget
 

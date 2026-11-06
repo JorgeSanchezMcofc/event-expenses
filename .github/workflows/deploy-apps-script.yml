@@ -1,0 +1,54 @@
+# Publishes apps-script/ to the Sheet's Apps Script project and moves the existing web app
+# deployment to the new version, so the /exec URL in config.js never changes.
+# Needs the repository secret CLASPRC_JSON (the ~/.clasprc.json that `clasp login` creates; see README).
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**', '.clasp.json']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-apps-script
+  cancel-in-progress: false
+
+env:
+  DEPLOYMENT_ID: AKfycby0-0K-088eTqMRYEJRMcsz502G_mHWfydPiGlIuWiHPY5XWVkos7q4a_WjLb5k9CaVnA
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check the script parses
+        run: cp apps-script/Code.gs /tmp/Code.js && node --check /tmp/Code.js
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@2.4.2
+
+      - name: Sign in
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Add the CLASPRC_JSON repository secret (see README)"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+
+      # clasp push replaces every file in the project, so stop if the live project has files this repo doesn't know.
+      - name: Make sure the live project only has Code and appsscript
+        run: |
+          mkdir /tmp/live && cd /tmp/live
+          printf '{"scriptId":"%s"}' "$(node -p "require('$GITHUB_WORKSPACE/.clasp.json').scriptId")" > .clasp.json
+          clasp pull
+          extra=$(ls | grep -v -x -e .clasp.json -e appsscript.json -e Code.js -e Code.gs || true)
+          if [ -n "$extra" ]; then echo "::error::The live project has files not in this repo: $extra"; exit 1; fi
+
+      - name: Push and deploy
+        run: |
+          clasp push --force
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "${GITHUB_SHA::7} $(git log -1 --pretty=%s | cut -c1-80)"
