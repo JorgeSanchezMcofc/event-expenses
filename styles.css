@@ -187,6 +187,19 @@ tr.cancelled td.amt { text-decoration: line-through; }
 .code-box .total { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .6rem; margin-top: .6rem; }
 .code-box .total .k { flex-basis: 100%; }
 .code-box .total b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.acct-search { display: flex; flex-direction: column; gap: .75rem; }
+#lk-acct-res:empty { display: none; }
+#lk-acct-res { display: flex; flex-direction: column; gap: .75rem; }
+#lk-acct-res > p { margin: 0; }
+.acct-hit { border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; padding: .6rem .8rem; background: #fff; }
+.acct-hit.rev { border-left-color: var(--red); }
+.acct-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem; margin-bottom: .35rem; overflow-wrap: anywhere; }
+.acct-code { font-size: 1.15rem; color: var(--blue); font-variant-numeric: tabular-nums; }
+.acct-hit.rev .acct-code { color: var(--red); }
+.acct-subs { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.acct-subs td { padding: .3rem .4rem; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.acct-subs td.sub-code { width: 1%; white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.acct-subs tr.hit td { background: #fff4d6; }
 .answer .meter-cap { font-size: .95rem; }
 /* thin stacked bar of statuses under an amount */
 .mix { display: flex; height: 5px; border-radius: 999px; overflow: hidden; background: #e9eef5; margin-top: .3rem; min-width: 60px; }

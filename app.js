@@ -321,11 +321,46 @@
     getCatalog(state.fy).then(function (cat) { if (nav !== state.nav) return;
       view.innerHTML = '<div class="stack">' +
         '<h1>Account lookup <span class="muted" style="font-weight:400">FY ' + esc(state.fy) + '</span></h1>' +
+        ((cat.chart || []).length ? '<section class="card acct-search"><label class="field"><span>Search any account (name or code)</span>' +
+          '<input id="lk-acct" type="search" autocomplete="off" placeholder="e.g. Office Supplies, 50201.01 or 2070102"></label>' +
+          '<div id="lk-acct-res"></div></section>' : '') +
         '<label class="field"><span>Event</span><select id="lk-event">' + eventOptions(cat, { all: true, withLines: true }) + '</select></label>' +
         '<div id="lk-body" class="stack"></div></div>';
       $('#lk-event').addEventListener('change', function (e) { setEvent(e.target.value); drawLookup(cat); });
+      if ($('#lk-acct')) $('#lk-acct').addEventListener('input', function (e) { drawAcctSearch(cat.chart, e.target.value); });
       drawLookup(cat);
     }).catch(showError);
+  }
+
+  // Account search: match the account code (with or without the dot), its name, or a sub-account code or name.
+  function drawAcctSearch(chart, q) {
+    var box = $('#lk-acct-res');
+    q = q.trim().toLowerCase().replace(/^@/, '');
+    if (!q) { box.innerHTML = ''; return; }
+    var digits = q.replace(/[^\d]/g, '');
+    var isCode = /^[\d.\s]+$/.test(q);
+    var subHit = function (sb) {
+      return isCode ? sb.code && digits && sb.code.indexOf(digits) === 0 : sb.name.toLowerCase().indexOf(q) >= 0;
+    };
+    var hits = chart.map(function (a) {
+      var acctHit = isCode ? a.acct.replace('.', '').indexOf(digits) === 0 || a.acct.indexOf(q) === 0 : a.name.toLowerCase().indexOf(q) >= 0;
+      var subs = a.subs.filter(subHit);
+      return { a: a, acctHit: acctHit, subs: subs };
+    }).filter(function (h) { return h.acctHit || h.subs.length; });
+    // Account matches first, then accounts found through one of their sub-accounts.
+    hits.sort(function (x, y) { return (y.acctHit - x.acctHit) || x.a.acct.localeCompare(y.a.acct); });
+    if (!hits.length) { box.innerHTML = '<p class="muted">No account matches "' + esc(q) + '".</p>'; return; }
+    var MAX = 8;
+    box.innerHTML = '<p class="muted small">' + hits.length + ' account' + (hits.length === 1 ? '' : 's') +
+      (hits.length > MAX ? ', showing the first ' + MAX + '. Type more to narrow it down.' : '') + '</p>' +
+      hits.slice(0, MAX).map(function (h) {
+        var a = h.a, rev = a.acct.charAt(0) === '4';
+        return '<div class="acct-hit' + (rev ? ' rev' : '') + '"><div class="acct-head"><b class="acct-code">' + esc(a.acct) + '</b> ' + esc(a.name) +
+          ' <span class="badge">' + (rev ? 'Revenue' : 'Expense') + '</span></div>' +
+          '<table class="acct-subs"><tbody>' + a.subs.map(function (sb) {
+            return '<tr' + (h.subs.indexOf(sb) >= 0 ? ' class="hit"' : '') + '><td class="sub-code">' + (sb.code ? '@' + esc(sb.code) : '') + '</td><td>' + esc(sb.name) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }).join('');
   }
 
   function drawLookup(cat, pickedCat) {

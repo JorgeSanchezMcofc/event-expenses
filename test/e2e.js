@@ -48,6 +48,22 @@ function startServer(port, token) {
       ok(`[${vp.name}] Lookup shows what Finance booked`, X.financeOct ? lkFin.includes('Finance booked') : /no statement yet/.test(lkFin));
       await page.screenshot({ path: `${OUT}/${vp.name}-1-lookup.png`, fullPage: true });
 
+      // Account search: by name, by code without the dot, and by a sub-account code.
+      if (await page.$('#lk-acct')) {
+        await page.fill('#lk-acct', 'office supplies');
+        const byName = await page.textContent('#lk-acct-res');
+        ok(`[${vp.name}] Account search by name`, /50201\.01/.test(byName) && byName.includes('@2020101'), byName.replace(/\s+/g, ' ').slice(0, 120));
+        await page.fill('#lk-acct', '5040101');
+        const byCode = await page.textContent('#lk-acct-res');
+        ok(`[${vp.name}] Account search by code lists every sub-account`, /50401\.01/.test(byCode) && byCode.includes('@2070101') && byCode.includes('@2070199'), byCode.replace(/\s+/g, ' ').slice(0, 120));
+        await page.fill('#lk-acct', '@2070102');
+        const bySub = await page.$$eval('#lk-acct-res tr.hit', trs => trs.map(t => t.textContent));
+        ok(`[${vp.name}] Account search by sub-account code highlights it`, bySub.length === 1 && bySub[0].includes('2070102'), JSON.stringify(bySub));
+        ok(`[${vp.name}] Account search has no sideways scrolling`, (await overflow()) <= 0, String(await overflow()));
+        await page.screenshot({ path: `${OUT}/${vp.name}-1c-account-search.png`, fullPage: true });
+        await page.fill('#lk-acct', '');
+      }
+
       await page.goto(base + '#/dashboard');
       await page.waitForSelector('.event-card[data-ev="BANQUET"]');
       const before = await page.textContent('.event-card[data-ev="BANQUET"]');

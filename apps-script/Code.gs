@@ -6,14 +6,14 @@
  * ALLOWED_EMAIL script property (one address, or several separated by commas) gets data. Nothing secret lives in this file: the
  * OAuth client ID and the allowed email are script properties (see README).
  *
- * Reads:  catalog, expenses, summary, history, revenue, reconcile (summary includes Finance YTD), budgets
+ * Reads:  catalog (includes the Chart of accounts), expenses, summary, history, revenue, reconcile (summary includes Finance YTD), budgets
  * Writes: expense (create / update / cancel), refreshRevenue
  * GET  ?action=summary&fy=26-27&event=BANQUET&token=...
  * POST {"action":"summary","fy":"26-27","event":"BANQUET","token":"..."} as text/plain
  */
 
 var TABS = { events: 'Events', catalog: 'Catalog', expenses: 'Expenses', revenue: 'Revenue', history: 'History', config: 'Config',
-  finance: 'Finance YTD', actuals: 'Actuals' };
+  finance: 'Finance YTD', actuals: 'Actuals', chart: 'Chart' };
 
 var COLS = {
   events: ['id', 'name', 'aliases', 'fy', 'expAcct', 'revAcct', 'date', 'attendees', 'track', 'revSheets', 'notes'],
@@ -26,7 +26,9 @@ var COLS = {
   finance: ['period', 'fy', 'months', 'acct', 'eventId', 'label', 'budget', 'ytd', 'source'],
   // Transaction detail from Sage (event accounts only), one row per GL line. Sub-account comes
   // from the "@1234567" code staff type in the description; Code Check says whether it was valid.
-  actuals: ['fy', 'date', 'acct', 'sub', 'check', 'eventId', 'jrnl', 'ref', 'description', 'amount', 'source']
+  actuals: ['fy', 'date', 'acct', 'sub', 'check', 'eventId', 'jrnl', 'ref', 'description', 'amount', 'source'],
+  // Chart of accounts: every account with its sub-accounts as "1234567 Name; 1234568 Name".
+  chart: ['acct', 'name', 'subs']
 };
 
 var TEXT_FIELDS = { fy: 1, acct: 1, sub: 1, po: 1, expAcct: 1, revAcct: 1, period: 1, ref: 1 };
@@ -256,8 +258,24 @@ function apiCatalog_(fy) {
     fys: fysFrom_(events),
     events: events.filter(function (e) { return e.fy === fy; }).map(stripRow_),
     lines: lines.map(stripRow_),
+    chart: chart_(),
     config: readConfig_()
   };
+}
+
+// Every account and its sub-accounts, for the account search on Lookup. Empty if there is no Chart tab.
+function chart_() {
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.chart)) return [];
+  return readTable_('chart').map(function (r) {
+    // A number cell drops the trailing zero (50202.10 -> 50202.1), so put it back.
+    var acct = /^\d+(\.\d+)?$/.test(r.acct) ? Number(r.acct).toFixed(2) : r.acct;
+    var subs = String(r.subs || '').split(';').map(function (x) { return x.trim(); }).filter(function (x) { return x; })
+      .map(function (x) {
+        var m = x.match(/^@?(\d{7})\s+(.*)$/);
+        return m ? { code: m[1], name: m[2] } : { code: '', name: x };
+      });
+    return { acct: acct, name: String(r.name || ''), subs: subs };
+  });
 }
 
 function apiExpenses_(fy, eventId) {

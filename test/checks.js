@@ -180,6 +180,18 @@ check('ALLOWED_EMAIL accepts a comma-separated list', () => {
   return both.map(r => r.data.email).join(' + ') + ' both allowed';
 });
 
+check('Catalog carries the Chart of accounts for the account search', () => {
+  const chart = me({ action: 'catalog', fy: '26-27' }).chart;
+  if (!gas.sheets.Chart) { assert.deepStrictEqual(chart, []); return 'no Chart tab, empty list'; }
+  assert.ok(chart.length > 0);
+  chart.forEach(a => {
+    assert.ok(/^[45]\d{4}\.\d{2}$/.test(a.acct), 'account ' + a.acct);
+    a.subs.forEach(sb => assert.ok(/^\d{7}$/.test(sb.code) && sb.name, a.acct + ' sub ' + JSON.stringify(sb)));
+  });
+  const n = chart.reduce((t, a) => t + a.subs.length, 0);
+  return chart.length + ' accounts, ' + n + ' sub-accounts';
+});
+
 check('No salary or personnel data in any tab the API reads', () => {
   const pat = /salar|payroll|compensation|benefit|pension|social security|medicare/i;
   const hits = [];

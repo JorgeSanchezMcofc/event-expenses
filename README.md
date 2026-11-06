@@ -21,7 +21,7 @@ index.html / app.js                                    apps-script/Code.gs      
 
 | Route | What it does |
 |---|---|
-| `#/lookup` | Pick an event and see its expense and revenue accounts, every sub-account with category, budget and remaining. Tap a category to get the exact sub-account in large type. |
+| `#/lookup` | Search any account by name or code (or a sub-account code such as @2070102) and see all its sub-accounts, from the Sheet's **Chart** tab. Then pick an event and see its expense and revenue accounts, every sub-account with category, budget and remaining. Tap a category to get the exact sub-account in large type. |
 | `#/add` | Add or edit an estimate. The account and sub-account fill in from the Catalog, with a warning when the line would go over budget. Edit and Cancel are reached from any expense list. |
 | `#/dashboard` | All tracked events for the FY: budget, adjusted target, estimate split by Estimated/Quoted, Approved, Invoiced, Paid, and what Finance has booked so far (Finance YTD). Drill down event → sub-account → expenses. |
 | `#/budgets` | Revenues or expenses → events or programs → every account → its sub-accounts, with Budget, Estimate (the app for expenses, Blanca's sheets for revenue), Actual (Sage detail in the **Actuals** tab, else Finance YTD) and Pending. |
